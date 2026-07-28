@@ -43,6 +43,12 @@ private:
         void updateDelayTimeEnablement();
         void drawMeters(juce::Graphics& g);
 
+        // Mic-placement browser: when the loaded IR sits in a pack laid out
+        // as <pack>/<mic>/<position>.wav, the combos let you step through it
+        void refreshIRBrowser();
+        void micChanged();
+        void positionChanged();
+
         HecateAudioProcessor& processor;
         juce::Image background;
 
@@ -61,6 +67,8 @@ private:
 
         juce::TextButton loadIRButton{"Load IR..."}, clearIRButton{"Clear"};
         juce::Label irNameLabel;
+        juce::ComboBox micBox, positionBox;
+        juce::Array<juce::File> micDirs, positionFiles;
         std::unique_ptr<juce::FileChooser> fileChooser;
 
         friend class HecateAudioProcessorEditor;

@@ -9,7 +9,7 @@
 //   -> [2x oversampled: stage 1 tanh -> interstage high-pass -> stage 2
 //      asymmetric tanh -> stage 3 tanh] -> DC blocker -> 2nd-order tone LP
 //
-// Gain 0..1 sweeps +6..+48 dB into the first stage; the boost adds a
+// Gain 0..1 sweeps +12..+60 dB into the first stage; the boost adds a
 // +8 dB mid hump at 750 Hz plus +6 dB of level, the classic metal recipe.
 class Saturator
 {
@@ -23,8 +23,8 @@ public:
     int getLatencySamples() const;
 
 private:
-    static constexpr float minDriveDb = 6.0f;
-    static constexpr float maxDriveDb = 48.0f;
+    static constexpr float minDriveDb = 12.0f;
+    static constexpr float maxDriveDb = 60.0f;
     static constexpr float boostLevelDb = 6.0f;
     static constexpr float toneMinHz = 800.0f;
     static constexpr float toneMaxHz = 12000.0f;

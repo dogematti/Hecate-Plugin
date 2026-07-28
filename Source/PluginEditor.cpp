@@ -153,6 +153,7 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
                 {
                     processor.loadImpulseResponse(fc.getResult());
                     irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
+                    refreshIRBrowser();
                 }
             });
     };
@@ -162,13 +163,147 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     {
         processor.clearImpulseResponse();
         irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
+        refreshIRBrowser();
     };
 
     addAndMakeVisible(irNameLabel);
     irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
     irNameLabel.setColour(juce::Label::textColourId, HecateLookAndFeel::textDim);
 
+    addAndMakeVisible(micBox);
+    micBox.setTextWhenNoChoicesAvailable("-");
+    micBox.onChange = [this] { micChanged(); };
+
+    addAndMakeVisible(positionBox);
+    positionBox.setTextWhenNoChoicesAvailable("-");
+    positionBox.onChange = [this] { positionChanged(); };
+
+    refreshIRBrowser();
+
     setSize(kCanvasW, kCanvasH);
+}
+
+namespace
+{
+    // Strips the shared filename prefix within a folder ("OD-E112-DEMON-DYN-57-")
+    // so the position combo shows just the varying part ("P10-50")
+    juce::String commonNamePrefix(const juce::Array<juce::File>& files)
+    {
+        if (files.size() < 2)
+            return {};
+
+        juce::String prefix = files[0].getFileNameWithoutExtension();
+        for (const auto& file : files)
+        {
+            const auto name = file.getFileNameWithoutExtension();
+            int len = 0;
+            const int limit = juce::jmin(prefix.length(), name.length());
+            while (len < limit && prefix[len] == name[len])
+                ++len;
+            prefix = prefix.substring(0, len);
+        }
+
+        // Cut back to the last separator so we never split mid-token
+        const int lastDash = juce::jmax(prefix.lastIndexOfChar('-'), prefix.lastIndexOfChar('_'));
+        return lastDash >= 0 ? prefix.substring(0, lastDash + 1) : juce::String();
+    }
+
+    juce::Array<juce::File> wavFilesIn(const juce::File& dir)
+    {
+        auto files = dir.findChildFiles(juce::File::findFiles, false, "*.wav;*.aif;*.aiff;*.flac");
+        files.sort();
+        return files;
+    }
+}
+
+void HecateAudioProcessorEditor::Content::refreshIRBrowser()
+{
+    micBox.clear(juce::dontSendNotification);
+    positionBox.clear(juce::dontSendNotification);
+    micDirs.clear();
+    positionFiles.clear();
+
+    const auto irPath = processor.apvts.state.getProperty("irPath").toString();
+    const juce::File irFile(irPath);
+    const bool browsable = processor.isUserImpulseResponseLoaded() && irFile.existsAsFile();
+    micBox.setEnabled(browsable);
+    positionBox.setEnabled(browsable);
+    if (!browsable)
+        return;
+
+    const auto micDir = irFile.getParentDirectory();
+    const auto packDir = micDir.getParentDirectory();
+
+    // Sibling folders that also hold IRs are treated as alternate mics
+    for (const auto& dir : packDir.findChildFiles(juce::File::findDirectories, false))
+        if (!wavFilesIn(dir).isEmpty())
+            micDirs.add(dir);
+    micDirs.sort();
+
+    for (int i = 0; i < micDirs.size(); ++i)
+    {
+        micBox.addItem(micDirs[i].getFileName(), i + 1);
+        if (micDirs[i] == micDir)
+            micBox.setSelectedId(i + 1, juce::dontSendNotification);
+    }
+    micBox.setEnabled(micDirs.size() > 1);
+
+    positionFiles = wavFilesIn(micDir);
+    const auto prefix = commonNamePrefix(positionFiles);
+
+    for (int i = 0; i < positionFiles.size(); ++i)
+    {
+        auto display = positionFiles[i].getFileNameWithoutExtension();
+        if (display.startsWith(prefix))
+            display = display.substring(prefix.length());
+        positionBox.addItem(display, i + 1);
+        if (positionFiles[i] == irFile)
+            positionBox.setSelectedId(i + 1, juce::dontSendNotification);
+    }
+    positionBox.setEnabled(positionFiles.size() > 1);
+}
+
+void HecateAudioProcessorEditor::Content::micChanged()
+{
+    const int micIndex = micBox.getSelectedId() - 1;
+    if (micIndex < 0 || micIndex >= micDirs.size())
+        return;
+
+    // Keep the same position in the new mic folder when the pack's naming
+    // allows it, otherwise fall back to the first file
+    const auto newFiles = wavFilesIn(micDirs[micIndex]);
+    if (newFiles.isEmpty())
+        return;
+
+    const auto wantedPosition = positionBox.getText();
+    const auto prefix = commonNamePrefix(newFiles);
+
+    juce::File target = newFiles[0];
+    for (const auto& file : newFiles)
+    {
+        auto display = file.getFileNameWithoutExtension();
+        if (display.startsWith(prefix))
+            display = display.substring(prefix.length());
+        if (display == wantedPosition)
+        {
+            target = file;
+            break;
+        }
+    }
+
+    processor.loadImpulseResponse(target);
+    irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
+    refreshIRBrowser();
+}
+
+void HecateAudioProcessorEditor::Content::positionChanged()
+{
+    const int positionIndex = positionBox.getSelectedId() - 1;
+    if (positionIndex < 0 || positionIndex >= positionFiles.size())
+        return;
+
+    processor.loadImpulseResponse(positionFiles[positionIndex]);
+    irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
 }
 
 void HecateAudioProcessorEditor::Content::refreshPresetBox()
@@ -202,6 +337,7 @@ void HecateAudioProcessorEditor::Content::loadUserPreset(const juce::File& file)
             processor.clearImpulseResponse();
 
         irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
+        refreshIRBrowser();
     }
 }
 
@@ -238,6 +374,11 @@ void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
         g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)).withExtraKerningFactor(0.15f));
         g.drawText(panel.title, panel.x, panel.y + 6, panel.w, 16, juce::Justification::centred, false);
     }
+
+    g.setColour(HecateLookAndFeel::textDim);
+    g.setFont(juce::Font(juce::FontOptions(11.0f)));
+    g.drawText("MIC", 572, 542, 190, 12, juce::Justification::centredLeft, false);
+    g.drawText("POSITION", 772, 542, 190, 12, juce::Justification::centredLeft, false);
 
     drawMeters(g);
 }
@@ -300,9 +441,11 @@ void HecateAudioProcessorEditor::Content::resized()
     syncBox.setBounds(460, 262, 88, 22);
     compButton.setBounds(688, 262, 50, 20);
 
-    loadIRButton.setBounds(572, 508, 110, 30);
-    clearIRButton.setBounds(692, 508, 70, 30);
-    irNameLabel.setBounds(572, 552, 420, 22);
+    loadIRButton.setBounds(572, 500, 110, 28);
+    clearIRButton.setBounds(692, 500, 70, 28);
+    micBox.setBounds(572, 556, 190, 24);
+    positionBox.setBounds(772, 556, 190, 24);
+    irNameLabel.setBounds(572, 592, 420, 20);
 }
 
 HecateAudioProcessorEditor::HecateAudioProcessorEditor(HecateAudioProcessor& p)
