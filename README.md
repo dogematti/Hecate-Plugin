@@ -1,6 +1,10 @@
 # Hecate
 
+[![Build](https://github.com/dogematti/Hecate-Plugin/actions/workflows/build.yml/badge.svg)](https://github.com/dogematti/Hecate-Plugin/actions/workflows/build.yml)
+
 A metal guitar amp suite plugin (AU + VST3 + Standalone) built with JUCE 8 and C++17.
+Tuned for extended-range guitars: split-band drive keeps a 7-string's low B tight
+*and* full, and the factory presets are voiced for modern metal out of the box.
 
 ![Hecate](Assets/background.png)
 
@@ -60,6 +64,13 @@ Nine factory presets — Modern Rhythm, **7-String Rhythm**, **7-String Scoop**,
 Djent, Doom (fuzz voicing), Solo Lead, Clean Shimmer, Ambient Swells + Default —
 exposed as host programs and in the preset menu. User presets save as XML to
 `~/Documents/Hecate/Presets`.
+
+## Quick start
+
+Load the **7-String Rhythm** preset, then shape to taste: **Tight** for chug
+tightness, **Depth** for low-end thump, **Mid/Freq** to place the scoop, and
+drop your own cab IRs into `~/Documents/Hecate/IRs` (the CAB tab browses
+mic-organised packs automatically).
 
 ## Building
 
