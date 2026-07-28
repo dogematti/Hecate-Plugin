@@ -3,17 +3,19 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <vector>
 
-// Sub-octave generator: a delay-line pitch shifter reading at half speed
+// Octave-down generator: a delay-line pitch shifter reading at half speed
 // through two crossfaded taps, with the wet signal low-passed so the sub
-// stays smooth. Sits before the amp like an octave pedal.
+// stays smooth. Pedal-style level controls: "direct" scales the incoming
+// guitar signal, "octave" scales the sub-octave, so direct=0/octave=1
+// plays only the octave-down voice. Sits before the amp like a pedal.
 class Octaver
 {
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void reset();
 
-    // mix 0..1 blends dry against the sub-octave
-    void process(juce::AudioBuffer<float>& buffer, float mix);
+    // octaveLevel and directLevel both 0..1
+    void process(juce::AudioBuffer<float>& buffer, float octaveLevel, float directLevel);
 
 private:
     static constexpr float windowSeconds = 0.05f;
@@ -28,4 +30,6 @@ private:
     int bufferSize = 0;
     int writeIndex = 0;
     float phase = 0.0f;
+
+    juce::SmoothedValue<float> octaveSmoothed, directSmoothed;
 };

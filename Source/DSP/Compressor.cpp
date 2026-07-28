@@ -18,6 +18,7 @@ void Compressor::process(juce::AudioBuffer<float>& buffer, float thresholdDb, fl
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
     auto* const* channels = buffer.getArrayOfWritePointers();
+    float minGain = 1.0f;
 
     for (int i = 0; i < numSamples; ++i)
     {
@@ -35,7 +36,11 @@ void Compressor::process(juce::AudioBuffer<float>& buffer, float thresholdDb, fl
             gain = juce::Decibels::decibelsToGain(-dbOver * (1.0f - 1.0f / ratio));
         }
 
+        minGain = juce::jmin(minGain, gain);
+
         for (int ch = 0; ch < numChannels; ++ch)
             channels[ch][i] *= gain;
     }
+
+    gainReductionDb.store(-juce::Decibels::gainToDecibels(minGain));
 }

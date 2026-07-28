@@ -28,9 +28,16 @@ void StereoReverb::AllpassFilter::reset()
     index = 0;
 }
 
-void StereoReverb::prepare(double sampleRate, int)
+void StereoReverb::prepare(double newSampleRate, int)
 {
+    sampleRate = newSampleRate;
     const double scale = sampleRate / 44100.0;
+
+    preDelayBuffer.assign((size_t)std::max(1, (int)(sampleRate * maxPreDelaySeconds)), 0.0f);
+    preDelayWriteIndex = 0;
+
+    for (auto* smoothed : {&wetSmoothed, &drySmoothed, &widthSmoothed})
+        smoothed->reset(sampleRate, 0.05);
 
     combsLeft.clear();
     combsRight.clear();
@@ -60,40 +67,52 @@ void StereoReverb::reset()
     for (auto& f : combsRight) f.reset();
     for (auto& f : allpassesLeft) f.reset();
     for (auto& f : allpassesRight) f.reset();
+
+    std::fill(preDelayBuffer.begin(), preDelayBuffer.end(), 0.0f);
+    preDelayWriteIndex = 0;
 }
 
-void StereoReverb::process(juce::AudioBuffer<float>& buffer, float roomSize, float width, float wet, float dry)
+void StereoReverb::process(juce::AudioBuffer<float>& buffer, float roomSize, float width,
+                           float damping, float preDelayMs, float wet, float dry)
 {
-    if (combsLeft.empty())
+    if (combsLeft.empty() || preDelayBuffer.empty())
         return;
 
     roomSize = juce::jlimit(0.0f, 1.0f, roomSize);
-    width = juce::jlimit(0.0f, 1.0f, width);
-    wet = juce::jlimit(0.0f, 1.0f, wet);
-    dry = juce::jlimit(0.0f, 1.0f, dry);
+    damping = juce::jlimit(0.0f, 1.0f, damping);
+    widthSmoothed.setTargetValue(juce::jlimit(0.0f, 1.0f, width));
+    wetSmoothed.setTargetValue(juce::jlimit(0.0f, 1.0f, wet));
+    drySmoothed.setTargetValue(juce::jlimit(0.0f, 1.0f, dry));
 
     const float feedback = juce::jmin(0.98f, roomSize * 0.28f + 0.7f);
+    const float combDamping = damping * 0.5f;   // Freeverb-style scaling; 1.0 would choke the combs
+    const int preDelaySamples = juce::jlimit(0, (int)preDelayBuffer.size() - 1,
+                                             (int)(preDelayMs * 0.001 * sampleRate));
     const bool stereo = buffer.getNumChannels() >= 2;
     const int numSamples = buffer.getNumSamples();
 
     auto* left = buffer.getWritePointer(0);
     auto* right = stereo ? buffer.getWritePointer(1) : nullptr;
 
-    // Freeverb width law: wet1 scales the own-side tail, wet2 the opposite side
-    const float wet1 = wet * (width * 0.5f + 0.5f);
-    const float wet2 = wet * ((1.0f - width) * 0.5f);
-
     for (int i = 0; i < numSamples; ++i)
     {
         const float inL = left[i];
         const float inR = stereo ? right[i] : inL;
-        const float reverbInput = (inL + inR) * 0.5f * inputGain;
+
+        // Pre-delay pushes the tail behind the riff
+        preDelayBuffer[(size_t)preDelayWriteIndex] = (inL + inR) * 0.5f * inputGain;
+        int readIndex = preDelayWriteIndex - preDelaySamples;
+        if (readIndex < 0)
+            readIndex += (int)preDelayBuffer.size();
+        const float reverbInput = preDelayBuffer[(size_t)readIndex];
+        if (++preDelayWriteIndex >= (int)preDelayBuffer.size())
+            preDelayWriteIndex = 0;
 
         float tailL = 0.0f, tailR = 0.0f;
         for (size_t c = 0; c < combsLeft.size(); ++c)
         {
-            tailL += combsLeft[c].process(reverbInput, feedback, damping);
-            tailR += combsRight[c].process(reverbInput, feedback, damping);
+            tailL += combsLeft[c].process(reverbInput, feedback, combDamping);
+            tailR += combsRight[c].process(reverbInput, feedback, combDamping);
         }
 
         for (size_t a = 0; a < allpassesLeft.size(); ++a)
@@ -102,14 +121,21 @@ void StereoReverb::process(juce::AudioBuffer<float>& buffer, float roomSize, flo
             tailR = allpassesRight[a].process(tailR);
         }
 
-        float outL = inL * dry + tailL * wet1 + tailR * wet2;
+        // Freeverb width law: wet1 scales the own-side tail, wet2 the opposite side
+        const float wetNow = wetSmoothed.getNextValue();
+        const float dryNow = drySmoothed.getNextValue();
+        const float widthNow = widthSmoothed.getNextValue();
+        const float wet1 = wetNow * (widthNow * 0.5f + 0.5f);
+        const float wet2 = wetNow * ((1.0f - widthNow) * 0.5f);
+
+        float outL = inL * dryNow + tailL * wet1 + tailR * wet2;
         if (!std::isfinite(outL))
             outL = 0.0f;
         left[i] = juce::jlimit(-2.0f, 2.0f, outL);
 
         if (stereo)
         {
-            float outR = inR * dry + tailR * wet1 + tailL * wet2;
+            float outR = inR * dryNow + tailR * wet1 + tailL * wet2;
             if (!std::isfinite(outR))
                 outR = 0.0f;
             right[i] = juce::jlimit(-2.0f, 2.0f, outR);

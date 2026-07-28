@@ -41,6 +41,7 @@ target_sources(Hecate
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
         Source/Parameters.cpp
+        Source/Presets.cpp
         Source/DSP/Octaver.cpp
         Source/DSP/Saturator.cpp
         Source/DSP/StereoDelay.cpp

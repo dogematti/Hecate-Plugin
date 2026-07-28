@@ -13,8 +13,9 @@ public:
     void prepare(double sampleRate, int maxBlockSize);
     void reset();
 
-    // roomSize, width, wet, dry all 0..1
-    void process(juce::AudioBuffer<float>& buffer, float roomSize, float width, float wet, float dry);
+    // roomSize, width, damping, wet, dry all 0..1; preDelayMs 0..200
+    void process(juce::AudioBuffer<float>& buffer, float roomSize, float width,
+                 float damping, float preDelayMs, float wet, float dry);
 
 private:
     class CombFilter
@@ -64,8 +65,16 @@ private:
     static constexpr int allpassTunings[] = {556, 441, 341, 225};
     static constexpr int stereoSpread = 23;
     static constexpr float inputGain = 0.015f;
-    static constexpr float damping = 0.25f;
+    static constexpr float maxPreDelaySeconds = 0.25f;
 
     std::vector<CombFilter> combsLeft, combsRight;
     std::vector<AllpassFilter> allpassesLeft, allpassesRight;
+
+    // Pre-delay on the (mono) reverb feed
+    std::vector<float> preDelayBuffer;
+    int preDelayWriteIndex = 0;
+
+    // Smoothed mix levels so automation doesn't zipper
+    juce::SmoothedValue<float> wetSmoothed, drySmoothed, widthSmoothed;
+    double sampleRate = 44100.0;
 };

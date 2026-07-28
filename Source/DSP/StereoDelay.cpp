@@ -13,12 +13,16 @@ void StereoDelay::prepare(double newSampleRate, int maxBlockSize)
     delayLine.prepare(spec);
 
     delaySamples.reset(sampleRate, 0.1);
+    dampingCoeff = 1.0f - std::exp(-juce::MathConstants<float>::twoPi
+                                   * feedbackDampingHz / (float)sampleRate);
     initialised = false;
+    reset();
 }
 
 void StereoDelay::reset()
 {
     delayLine.reset();
+    dampingState[0] = dampingState[1] = 0.0f;
     initialised = false;
 }
 
@@ -47,7 +51,11 @@ void StereoDelay::process(juce::AudioBuffer<float>& buffer, float timeMs, float 
         {
             auto* samples = buffer.getWritePointer(ch);
             const float delayed = delayLine.popSample(ch, delay);
-            delayLine.pushSample(ch, samples[i] + delayed * feedback);
+
+            // Low-pass in the feedback loop so repeats darken like tape
+            dampingState[ch] += dampingCoeff * (delayed - dampingState[ch]);
+            delayLine.pushSample(ch, samples[i] + dampingState[ch] * feedback);
+
             samples[i] += delayed * mix;
         }
     }

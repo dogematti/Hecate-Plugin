@@ -22,6 +22,12 @@ namespace
             [](float value, int) { return juce::String(juce::roundToInt(value * 100.0f)) + " %"; });
     }
 
+    Attributes hertzText()
+    {
+        return Attributes().withStringFromValueFunction(
+            [](float value, int) { return juce::String(juce::roundToInt(value)) + " Hz"; });
+    }
+
     std::unique_ptr<juce::AudioParameterFloat> makeParam(const char* id, const char* name,
                                                          juce::NormalisableRange<float> range,
                                                          float defaultValue, Attributes attributes = {})
@@ -29,20 +35,30 @@ namespace
         return std::make_unique<juce::AudioParameterFloat>(juce::ParameterID{id, 1}, name,
                                                            range, defaultValue, attributes);
     }
+
+    std::unique_ptr<juce::AudioParameterBool> makeBool(const char* id, const char* name, bool defaultValue)
+    {
+        return std::make_unique<juce::AudioParameterBool>(juce::ParameterID{id, 1}, name, defaultValue);
+    }
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
 
-    params.push_back(makeParam(param::inputGain, "Input Gain",
-                               {0.0f, 4.0f, 0.01f}, 1.0f, gainAsDecibelText()));
-    params.push_back(makeParam(param::octaveMix, "Octave Mix",
+    params.push_back(makeParam(param::octaveDirect, "Direct Level",
+                               {0.0f, 1.0f, 0.01f}, 1.0f, percentText()));
+    params.push_back(makeParam(param::octaveLevel, "Octave Level",
                                {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
+    params.push_back(makeBool(param::gateOn, "Gate On", true));
     params.push_back(makeParam(param::gateThreshold, "Gate Threshold",
                                {-80.0f, -20.0f, 0.1f}, -60.0f, decibelText()));
-    params.push_back(makeParam(param::drive, "Drive",
+
+    params.push_back(makeParam(param::gain, "Gain",
                                {0.0f, 1.0f, 0.01f}, 0.5f, percentText()));
+    params.push_back(makeParam(param::tight, "Tight",
+                               {40.0f, 300.0f, 1.0f}, 100.0f, hertzText()));
+    params.push_back(makeBool(param::boost, "Boost", false));
     params.push_back(makeParam(param::tone, "Tone",
                                {0.0f, 1.0f, 0.01f}, 0.5f, percentText()));
 
@@ -55,6 +71,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(makeParam(param::presence, "Presence",
                                {-12.0f, 12.0f, 0.1f}, 0.0f, decibelText()));
 
+    params.push_back(makeBool(param::compOn, "Comp On", false));
     params.push_back(makeParam(param::compThreshold, "Comp Threshold",
                                {-60.0f, 0.0f, 0.1f}, -24.0f, decibelText()));
     params.push_back(makeParam(param::compRatio, "Comp Ratio",
@@ -71,6 +88,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     params.push_back(makeParam(param::chorusMix, "Chorus Mix",
                                {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
 
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{param::delaySync, 1}, "Delay Sync",
+        juce::StringArray(param::delaySyncChoices,
+                          (int)std::size(param::delaySyncChoices)), 0));
     params.push_back(makeParam(param::delayTime, "Delay Time",
                                {50.0f, 1000.0f, 1.0f}, 350.0f,
                                Attributes().withStringFromValueFunction(
@@ -84,6 +105,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                {0.0f, 1.0f, 0.01f}, 0.5f, percentText()));
     params.push_back(makeParam(param::reverbWidth, "Reverb Width",
                                {0.0f, 1.0f, 0.01f}, 1.0f, percentText()));
+    params.push_back(makeParam(param::reverbDamp, "Reverb Damping",
+                               {0.0f, 1.0f, 0.01f}, 0.4f, percentText()));
+    params.push_back(makeParam(param::reverbPreDelay, "Reverb Pre-Delay",
+                               {0.0f, 200.0f, 1.0f}, 20.0f,
+                               Attributes().withStringFromValueFunction(
+                                   [](float value, int) { return juce::String(juce::roundToInt(value)) + " ms"; })));
     params.push_back(makeParam(param::reverbWet, "Reverb Wet",
                                {0.0f, 1.0f, 0.01f}, 0.15f, percentText()));
     params.push_back(makeParam(param::reverbDry, "Reverb Dry",

@@ -12,6 +12,10 @@ void Octaver::prepare(double sampleRate, int)
 
     lowpassCoeff = 1.0f - std::exp(-juce::MathConstants<float>::twoPi
                                    * wetLowpassHz / (float)sampleRate);
+
+    for (auto* smoothed : {&octaveSmoothed, &directSmoothed})
+        smoothed->reset(sampleRate, 0.02);
+
     reset();
 }
 
@@ -39,10 +43,13 @@ float Octaver::readTap(int channel, float delaySamples) const
     return buffer[(size_t)index0] + frac * (buffer[(size_t)index1] - buffer[(size_t)index0]);
 }
 
-void Octaver::process(juce::AudioBuffer<float>& buffer, float mix)
+void Octaver::process(juce::AudioBuffer<float>& buffer, float octaveLevel, float directLevel)
 {
     const int numChannels = juce::jmin(buffer.getNumChannels(), 2);
     const int numSamples = buffer.getNumSamples();
+
+    octaveSmoothed.setTargetValue(juce::jlimit(0.0f, 1.0f, octaveLevel));
+    directSmoothed.setTargetValue(juce::jlimit(0.0f, 1.0f, directLevel));
 
     // Reading at half the write speed halves the pitch; the read head slips
     // one window per cycle, so a second tap half a window behind crossfades
@@ -63,6 +70,9 @@ void Octaver::process(juce::AudioBuffer<float>& buffer, float mix)
         const float gain1 = 1.0f - std::abs(2.0f * phase - 1.0f);
         const float gain2 = 1.0f - gain1;
 
+        const float octave = octaveSmoothed.getNextValue();
+        const float direct = directSmoothed.getNextValue();
+
         for (int ch = 0; ch < numChannels; ++ch)
         {
             const float wet = readTap(ch, delay1) * gain1 + readTap(ch, delay2) * gain2;
@@ -70,7 +80,7 @@ void Octaver::process(juce::AudioBuffer<float>& buffer, float mix)
             lowpassState[ch] += lowpassCoeff * (wet - lowpassState[ch]);
 
             auto* samples = buffer.getWritePointer(ch);
-            samples[i] = samples[i] * (1.0f - mix) + lowpassState[ch] * mix;
+            samples[i] = samples[i] * direct + lowpassState[ch] * octave;
         }
 
         if (++writeIndex >= bufferSize)
