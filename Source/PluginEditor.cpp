@@ -5,64 +5,68 @@
 
 namespace
 {
-    constexpr int kCanvasW = 1020, kCanvasH = 470;
-    constexpr int kKnobW = 80, kKnobH = 140;
-    constexpr int kRow1Y = 100, kRow2Y = 304;
+    // Canvas matches the artwork's aspect ratio exactly (1619x971), so the
+    // triple goddess renders undistorted: art in the upper half, controls
+    // in the smoke below.
+    constexpr int kCanvasW = 1020, kCanvasH = 612;
     constexpr int kAmpPage = 0, kFxPage = 1, kCabPage = 2;
+    constexpr int kRow1Y = 322, kRow2Y = 460;
+    constexpr int kKnobSize = 76, kHeroSize = 100;
 
-    struct KnobDef { const char* id; const char* caption; int x; int y; int page; };
+    struct KnobDef { const char* id; const char* caption; int x; int y; int size; int page; };
 
     constexpr KnobDef kKnobDefs[] = {
-        // AMP page
-        {param::octaveDirect,   "Direct",     18, kRow1Y, kAmpPage},
-        {param::octaveLevel,    "Octave",    104, kRow1Y, kAmpPage},
-        {param::gateThreshold,  "Gate",      190, kRow1Y, kAmpPage},
-        {param::gain,           "Gain",      296, kRow1Y, kAmpPage},
-        {param::tight,          "Tight",     382, kRow1Y, kAmpPage},
-        {param::tone,           "Tone",      468, kRow1Y, kAmpPage},
-        {param::bass,           "Bass",      574, kRow1Y, kAmpPage},
-        {param::mid,            "Mid",       660, kRow1Y, kAmpPage},
-        {param::treble,         "Treble",    746, kRow1Y, kAmpPage},
-        {param::presence,       "Presence",  832, kRow1Y, kAmpPage},
-        {param::outputGain,     "Output",    926, kRow1Y, kAmpPage},
-        {param::compThreshold,  "Threshold",  18, kRow2Y, kAmpPage},
-        {param::compRatio,      "Ratio",     104, kRow2Y, kAmpPage},
+        // AMP page — row 1: input chain into the hero gain
+        {param::octaveDirect,   "Direct",    30, kRow1Y, kKnobSize, kAmpPage},
+        {param::octaveLevel,    "Octave",   116, kRow1Y, kKnobSize, kAmpPage},
+        {param::gateThreshold,  "Gate",     202, kRow1Y, kKnobSize, kAmpPage},
+        {param::gain,           "Gain",     320, kRow1Y - 10, kHeroSize, kAmpPage},
+        {param::tight,          "Tight",    452, kRow1Y, kKnobSize, kAmpPage},
+        {param::tone,           "Tone",     538, kRow1Y, kKnobSize, kAmpPage},
+        // AMP page — row 2
+        {param::bass,           "Bass",      30, kRow2Y, kKnobSize, kAmpPage},
+        {param::mid,            "Mid",      116, kRow2Y, kKnobSize, kAmpPage},
+        {param::treble,         "Treble",   202, kRow2Y, kKnobSize, kAmpPage},
+        {param::presence,       "Presence", 288, kRow2Y, kKnobSize, kAmpPage},
+        {param::compThreshold,  "Thresh",   400, kRow2Y, kKnobSize, kAmpPage},
+        {param::compRatio,      "Ratio",    486, kRow2Y, kKnobSize, kAmpPage},
+        {param::outputGain,     "Output",   640, kRow2Y, kKnobSize, kAmpPage},
 
         // FX page
-        {param::chorusRate,     "Rate",       18, kRow1Y, kFxPage},
-        {param::chorusDepth,    "Depth",     104, kRow1Y, kFxPage},
-        {param::chorusMix,      "Mix",       190, kRow1Y, kFxPage},
-        {param::delayTime,      "Time",      296, kRow1Y, kFxPage},
-        {param::delayFeedback,  "Feedback",  382, kRow1Y, kFxPage},
-        {param::delayMix,       "Mix",       468, kRow1Y, kFxPage},
-        {param::reverbRoom,     "Room",       18, kRow2Y, kFxPage},
-        {param::reverbWidth,    "Width",     104, kRow2Y, kFxPage},
-        {param::reverbDamp,     "Damping",   190, kRow2Y, kFxPage},
-        {param::reverbPreDelay, "Pre-Delay", 276, kRow2Y, kFxPage},
-        {param::reverbWet,      "Wet",       362, kRow2Y, kFxPage},
-        {param::reverbDry,      "Dry",       448, kRow2Y, kFxPage},
+        {param::chorusRate,     "Rate",      30, kRow1Y, kKnobSize, kFxPage},
+        {param::chorusDepth,    "Depth",    116, kRow1Y, kKnobSize, kFxPage},
+        {param::chorusMix,      "Mix",      202, kRow1Y, kKnobSize, kFxPage},
+        {param::delayTime,      "Time",     320, kRow1Y, kKnobSize, kFxPage},
+        {param::delayFeedback,  "Feedback", 406, kRow1Y, kKnobSize, kFxPage},
+        {param::delayMix,       "Mix",      492, kRow1Y, kKnobSize, kFxPage},
+        {param::reverbRoom,     "Room",      30, kRow2Y, kKnobSize, kFxPage},
+        {param::reverbWidth,    "Width",    116, kRow2Y, kKnobSize, kFxPage},
+        {param::reverbDamp,     "Damping",  202, kRow2Y, kKnobSize, kFxPage},
+        {param::reverbPreDelay, "Pre-Dly",  288, kRow2Y, kKnobSize, kFxPage},
+        {param::reverbWet,      "Wet",      374, kRow2Y, kKnobSize, kFxPage},
+        {param::reverbDry,      "Dry",      460, kRow2Y, kKnobSize, kFxPage},
     };
 
     constexpr int kDelayTimeKnobIndex = 16;
 
-    struct PanelDef { int x; int y; int w; int h; const char* title; int page; };
+    // Engraved section rules: small-caps title with a hairline running to x+w
+    struct SectionDef { const char* title; int x; int w; int y; int page; };
 
-    constexpr PanelDef kPanels[] = {
-        { 10,  56, 268, 192, "INPUT",      kAmpPage},
-        {288,  56, 268, 192, "AMP",        kAmpPage},
-        {566,  56, 346, 192, "EQ",         kAmpPage},
-        {922,  56,  88, 192, "OUTPUT",     kAmpPage},
-        { 10, 260, 268, 192, "COMPRESSOR", kAmpPage},
-        {288, 260, 722, 192, "METERS",     kAmpPage},
+    constexpr SectionDef kSections[] = {
+        {"INPUT",     30, 248, 306, kAmpPage},
+        {"AMP",      320, 294, 306, kAmpPage},
+        {"EQ",        30, 334, 444, kAmpPage},
+        {"DYNAMICS", 400, 162, 444, kAmpPage},
+        {"OUTPUT",   640,  76, 444, kAmpPage},
 
-        { 10,  56, 268, 192, "CHORUS",     kFxPage},
-        {288,  56, 268, 192, "DELAY",      kFxPage},
-        { 10, 260, 532, 192, "REVERB",     kFxPage},
+        {"CHORUS",    30, 248, 306, kFxPage},
+        {"DELAY",    320, 248, 306, kFxPage},
+        {"REVERB",    30, 506, 444, kFxPage},
 
-        { 10,  56, 1000, 396, "CABINET IR", kCabPage},
+        {"CABINET",   30, 590, 306, kCabPage},
     };
 
-    const juce::Rectangle<int> kMetersArea{288, 260, 722, 192};
+    const juce::Rectangle<int> kMetersArea{585, 8, 160, 30};
     constexpr int kFactoryPresetIdOffset = 1;
     constexpr int kUserPresetIdOffset = 1000;
 
@@ -109,10 +113,11 @@ HecateAudioProcessorEditor::Content::Knob::Knob(juce::AudioProcessorValueTreeSta
         slider.setDoubleClickReturnValue(
             true, (double)parameter->convertFrom0to1(parameter->getDefaultValue()));
 
-    label.setText(caption, juce::dontSendNotification);
+    label.setText(juce::String(caption).toUpperCase(), juce::dontSendNotification);
     label.setJustificationType(juce::Justification::centred);
-    label.setFont(juce::Font(juce::FontOptions(13.0f)));
-    label.attachToComponent(&slider, false);
+    label.setFont(juce::Font(juce::FontOptions(11.0f)).withExtraKerningFactor(0.12f));
+    label.setColour(juce::Label::textColourId, HecateLookAndFeel::textDim);
+    label.setInterceptsMouseClicks(false, false);
 }
 
 HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
@@ -174,11 +179,13 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
             });
     };
 
-    addAndMakeVisible(ampTabButton);
+    for (auto* tab : {&ampTabButton, &fxTabButton, &cabTabButton})
+    {
+        tab->setComponentID("tab");
+        addAndMakeVisible(*tab);
+    }
     ampTabButton.onClick = [this] { setPage(kAmpPage); };
-    addAndMakeVisible(fxTabButton);
     fxTabButton.onClick = [this] { setPage(kFxPage); };
-    addAndMakeVisible(cabTabButton);
     cabTabButton.onClick = [this] { setPage(kCabPage); };
 
     addAndMakeVisible(loadIRButton);
@@ -386,111 +393,119 @@ void HecateAudioProcessorEditor::Content::updateDelayTimeEnablement()
 
 void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
 {
+    // Artwork, aspect-correct
     if (background.isValid())
         g.drawImage(background, getLocalBounds().toFloat());
     else
         g.fillAll(juce::Colour(0xff0d0b12));
 
-    // Title, over the moons
-    g.setColour(HecateLookAndFeel::accent);
-    g.setFont(juce::Font(juce::FontOptions(30.0f, juce::Font::bold)).withExtraKerningFactor(0.4f));
-    g.drawText("HECATE", getLocalBounds().removeFromTop(52), juce::Justification::centred, false);
+    // Header scrim, then a soft gradient down into the smoke so controls read
+    g.setGradientFill(juce::ColourGradient(juce::Colours::black.withAlpha(0.62f), 0.0f, 0.0f,
+                                           juce::Colours::transparentBlack, 0.0f, 72.0f, false));
+    g.fillRect(0, 0, kCanvasW, 72);
 
-    // Translucent panels keep the knobs readable while the artwork shows through
-    for (const auto& panel : kPanels)
+    g.setGradientFill(juce::ColourGradient(juce::Colours::transparentBlack, 0.0f, 262.0f,
+                                           juce::Colours::black.withAlpha(0.68f), 0.0f, (float)kCanvasH, false));
+    g.fillRect(0, 262, kCanvasW, kCanvasH - 262);
+
+    // Title, left of the artwork's centre
+    g.setColour(HecateLookAndFeel::accent);
+    g.setFont(juce::Font(juce::FontOptions(22.0f, juce::Font::bold)).withExtraKerningFactor(0.42f));
+    g.drawText("HECATE", 20, 8, 170, 28, juce::Justification::centredLeft, false);
+
+    // Engraved section rules
+    for (const auto& section : kSections)
     {
-        if (panel.page != currentPage)
+        if (section.page != currentPage)
             continue;
 
-        auto r = juce::Rectangle<float>((float)panel.x, (float)panel.y, (float)panel.w, (float)panel.h);
-        g.setColour(juce::Colour(0xff0d0b12).withAlpha(0.70f));
-        g.fillRoundedRectangle(r, 8.0f);
-        g.setColour(HecateLookAndFeel::accent.withAlpha(0.18f));
-        g.drawRoundedRectangle(r.reduced(0.5f), 8.0f, 1.0f);
+        const auto font = juce::Font(juce::FontOptions(11.0f, juce::Font::bold)).withExtraKerningFactor(0.25f);
+        g.setFont(font);
+        g.setColour(HecateLookAndFeel::accent.withAlpha(0.85f));
+        g.drawText(section.title, section.x, section.y - 15, section.w, 13,
+                   juce::Justification::centredLeft, false);
 
-        g.setColour(HecateLookAndFeel::textDim);
-        g.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)).withExtraKerningFactor(0.15f));
-        g.drawText(panel.title, panel.x, panel.y + 6, panel.w, 16, juce::Justification::centred, false);
+        const float textEnd = (float)section.x
+                              + juce::GlyphArrangement::getStringWidth(font, section.title) + 10.0f;
+        g.setColour(HecateLookAndFeel::accent.withAlpha(0.25f));
+        g.fillRect(textEnd, (float)section.y - 9.0f, (float)(section.x + section.w) - textEnd, 1.0f);
     }
-
-    if (currentPage == kAmpPage)
-        drawMeters(g);
 
     if (currentPage == kCabPage)
     {
         g.setColour(HecateLookAndFeel::textDim);
-        g.setFont(juce::Font(juce::FontOptions(11.0f)));
-        g.drawText("MIC", 60, 210, 300, 12, juce::Justification::centredLeft, false);
-        g.drawText("POSITION", 400, 210, 300, 12, juce::Justification::centredLeft, false);
+        g.setFont(juce::Font(juce::FontOptions(11.0f)).withExtraKerningFactor(0.12f));
+        g.drawText("MIC", 30, 392, 200, 12, juce::Justification::centredLeft, false);
+        g.drawText("POSITION", 340, 392, 200, 12, juce::Justification::centredLeft, false);
     }
+
+    drawMeters(g);
 }
 
+// Slim meters built into the header, visible on every tab
 void HecateAudioProcessorEditor::Content::drawMeters(juce::Graphics& g)
 {
-    const auto barArea = [](int x) { return juce::Rectangle<float>((float)x, 300.0f, 26.0f, 128.0f); };
+    g.setColour(HecateLookAndFeel::textDim);
+    g.setFont(juce::Font(juce::FontOptions(9.0f)));
+    g.drawText("OUT", 588, 11, 26, 9, juce::Justification::centredRight, false);
+    g.drawText("GR", 588, 23, 26, 9, juce::Justification::centredRight, false);
 
     // Output peak, -60..0 dB
     {
-        auto area = barArea(500);
-        g.setColour(juce::Colour(0xff17141c));
+        juce::Rectangle<float> area(620.0f, 12.0f, 80.0f, 7.0f);
+        g.setColour(HecateLookAndFeel::surface.withAlpha(0.9f));
         g.fillRoundedRectangle(area, 3.0f);
 
         const float levelDb = juce::Decibels::gainToDecibels(processor.getOutputLevel(), -60.0f);
         const float fraction = juce::jlimit(0.0f, 1.0f, (levelDb + 60.0f) / 60.0f);
-        auto fill = area.removeFromBottom(area.getHeight() * fraction);
         g.setColour(levelDb > -3.0f ? juce::Colour(0xffc85450) : HecateLookAndFeel::accent);
-        g.fillRoundedRectangle(fill, 3.0f);
+        g.fillRoundedRectangle(area.removeFromLeft(area.getWidth() * fraction), 3.0f);
     }
 
-    // Compressor gain reduction, 0..24 dB from the top
+    // Compressor gain reduction, 0..24 dB
     {
-        auto area = barArea(610);
-        g.setColour(juce::Colour(0xff17141c));
+        juce::Rectangle<float> area(620.0f, 24.0f, 80.0f, 7.0f);
+        g.setColour(HecateLookAndFeel::surface.withAlpha(0.9f));
         g.fillRoundedRectangle(area, 3.0f);
 
         const float fraction = juce::jlimit(0.0f, 1.0f, processor.getGainReductionDb() / 24.0f);
-        auto fill = area.removeFromTop(area.getHeight() * fraction);
         g.setColour(juce::Colour(0xffb08a4a));
-        g.fillRoundedRectangle(fill, 3.0f);
+        g.fillRoundedRectangle(area.removeFromLeft(area.getWidth() * fraction), 3.0f);
     }
 
     // Gate LED
-    {
-        const bool open = processor.isGateOpen();
-        g.setColour(open ? juce::Colour(0xff6fae6a) : juce::Colour(0xff5a2622));
-        g.fillEllipse(724.0f, 310.0f, 18.0f, 18.0f);
-        g.setColour(juce::Colours::black.withAlpha(0.4f));
-        g.drawEllipse(724.0f, 310.0f, 18.0f, 18.0f, 1.0f);
-    }
-
-    g.setColour(HecateLookAndFeel::textDim);
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("OUT", 490, 434, 46, 14, juce::Justification::centred, false);
-    g.drawText("GR", 600, 434, 46, 14, juce::Justification::centred, false);
-    g.drawText("GATE", 710, 434, 46, 14, juce::Justification::centred, false);
+    const bool open = processor.isGateOpen();
+    g.setColour(open ? juce::Colour(0xff6fae6a) : juce::Colour(0xff5a2622));
+    g.fillEllipse(712.0f, 14.0f, 15.0f, 15.0f);
+    g.setColour(juce::Colours::black.withAlpha(0.4f));
+    g.drawEllipse(712.0f, 14.0f, 15.0f, 15.0f, 1.0f);
 }
 
 void HecateAudioProcessorEditor::Content::resized()
 {
     for (size_t i = 0; i < knobs.size(); ++i)
-        knobs[i]->slider.setBounds(kKnobDefs[i].x, kKnobDefs[i].y, kKnobW, kKnobH);
+    {
+        const auto& def = kKnobDefs[i];
+        knobs[i]->slider.setBounds(def.x, def.y, def.size, def.size);
+        knobs[i]->label.setBounds(def.x - 8, def.y + def.size + 2, def.size + 16, 14);
+    }
 
-    presetBox.setBounds(20, 14, 250, 26);
-    savePresetButton.setBounds(278, 14, 60, 26);
-    ampTabButton.setBounds(796, 14, 64, 26);
-    fxTabButton.setBounds(866, 14, 64, 26);
-    cabTabButton.setBounds(936, 14, 64, 26);
+    presetBox.setBounds(200, 10, 200, 24);
+    savePresetButton.setBounds(408, 10, 52, 24);
+    ampTabButton.setBounds(796, 8, 68, 28);
+    fxTabButton.setBounds(868, 8, 68, 28);
+    cabTabButton.setBounds(940, 8, 68, 28);
 
-    gateButton.setBounds(214, 60, 54, 20);
-    boostButton.setBounds(494, 60, 54, 20);
-    compButton.setBounds(214, 264, 54, 20);
-    syncBox.setBounds(460, 58, 88, 22);
+    gateButton.setBounds(228, 290, 46, 18);
+    boostButton.setBounds(560, 290, 52, 18);
+    compButton.setBounds(514, 428, 46, 18);
+    syncBox.setBounds(500, 288, 68, 22);
 
-    loadIRButton.setBounds(60, 120, 140, 32);
-    clearIRButton.setBounds(216, 120, 80, 32);
-    micBox.setBounds(60, 228, 300, 26);
-    positionBox.setBounds(400, 228, 300, 26);
-    irNameLabel.setBounds(60, 290, 600, 22);
+    loadIRButton.setBounds(30, 332, 130, 30);
+    clearIRButton.setBounds(176, 332, 74, 30);
+    micBox.setBounds(30, 408, 280, 26);
+    positionBox.setBounds(340, 408, 280, 26);
+    irNameLabel.setBounds(30, 452, 560, 20);
 }
 
 HecateAudioProcessorEditor::HecateAudioProcessorEditor(HecateAudioProcessor& p)
