@@ -585,7 +585,9 @@ void HecateAudioProcessorEditor::Content::rebuildIRCurves()
         if (reader == nullptr)
             return {};
 
-        const int numSamples = (int)juce::jmin<juce::int64>(reader->lengthInSamples, 1 << 14);
+        // std::min, not juce::jmin: with juce_dsp in scope, GCC instantiates
+        // jmin's SIMDRegister<long long> overload, which has no SSE specialisation
+        const int numSamples = (int)std::min<juce::int64>(reader->lengthInSamples, 1 << 14);
         juce::AudioBuffer<float> ir(1, numSamples);
         reader->read(&ir, 0, numSamples, 0, true, false);
         return buildResponsePath(ir.getReadPointer(0), numSamples, reader->sampleRate, area);
