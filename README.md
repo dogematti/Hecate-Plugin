@@ -6,7 +6,7 @@ A metal guitar amp suite plugin (AU + VST3 + Standalone) built with JUCE 8 and C
 Tuned for extended-range guitars: split-band drive keeps a 7-string's low B tight
 *and* full, and the factory presets are voiced for modern metal out of the box.
 
-![Hecate — AMP tab](Assets/screenshot-amp.png)
+![Hecate — AMP tab](Assets/screenshot-amp-v2.png)
 
 ## Signal chain
 
