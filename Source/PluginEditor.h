@@ -72,8 +72,15 @@ private:
         std::vector<std::unique_ptr<Knob>> knobs;
 
         juce::TextButton gateButton{"ON"}, boostButton{"BOOST"}, compButton{"ON"};
+        juce::TextButton pingButton{"PING"};
         std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment>
-            gateAttachment, boostAttachment, compAttachment;
+            gateAttachment, boostAttachment, compAttachment, pingAttachment;
+
+        // Tap tempo: average of the last few tap intervals sets the delay time
+        juce::TextButton tapButton{"TAP"};
+        double lastTapMs = 0.0;
+        juce::Array<double> tapIntervals;
+        void tapTempo();
 
         juce::ComboBox syncBox, clipBox;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>

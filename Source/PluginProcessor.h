@@ -101,10 +101,14 @@ private:
         std::atomic<float>* compRatio = nullptr;
         std::atomic<float>* chorusRate = nullptr;
         std::atomic<float>* chorusDepth = nullptr;
+        std::atomic<float>* chorusDelay = nullptr;
+        std::atomic<float>* chorusFeedback = nullptr;
         std::atomic<float>* chorusMix = nullptr;
         std::atomic<float>* delaySync = nullptr;
         std::atomic<float>* delayTime = nullptr;
         std::atomic<float>* delayFeedback = nullptr;
+        std::atomic<float>* delayDamp = nullptr;
+        std::atomic<float>* delayPingPong = nullptr;
         std::atomic<float>* delayMix = nullptr;
         std::atomic<float>* reverbRoom = nullptr;
         std::atomic<float>* reverbWidth = nullptr;
@@ -116,6 +120,8 @@ private:
         std::atomic<float>* cabLowCut = nullptr;
         std::atomic<float>* cabHighCut = nullptr;
         std::atomic<float>* doubler = nullptr;
+        std::atomic<float>* doublerSpread = nullptr;
+        std::atomic<float>* doublerDrift = nullptr;
         std::atomic<float>* outputGain = nullptr;
     };
 

@@ -60,16 +60,20 @@ namespace
          "Chorus LFO speed."},
         {param::chorusDepth,    "Depth",    116, kRow1Y, kKnobSize, kFxPage,
          "Chorus modulation depth."},
-        {param::chorusMix,      "Mix",      202, kRow1Y, kKnobSize, kFxPage,
+        {param::chorusDelay,    "Delay",    202, kRow1Y, kKnobSize, kFxPage,
+         "Chorus centre delay: short = flanger territory, long = wide detune."},
+        {param::chorusFeedback, "Feedbk",   288, kRow1Y, kKnobSize, kFxPage,
+         "Chorus feedback (+/-): adds resonance; negative flips the character."},
+        {param::chorusMix,      "Mix",      374, kRow1Y, kKnobSize, kFxPage,
          "Chorus wet mix. 0 = off."},
-        {param::delayTime,      "Time",     320, kRow1Y, kKnobSize, kFxPage,
-         "Delay time in ms. Disabled when Sync is not Free."},
-        {param::delayFeedback,  "Feedback", 406, kRow1Y, kKnobSize, kFxPage,
-         "Delay repeats; the feedback path darkens each repeat."},
-        {param::delayMix,       "Mix",      492, kRow1Y, kKnobSize, kFxPage,
+        {param::delayTime,      "Time",     490, kRow1Y, kKnobSize, kFxPage,
+         "Delay time in ms. Disabled when Sync is not Free; set it live with TAP."},
+        {param::delayFeedback,  "Feedbk",   576, kRow1Y, kKnobSize, kFxPage,
+         "Delay repeats."},
+        {param::delayDamp,      "Damping",  662, kRow1Y, kKnobSize, kFxPage,
+         "Feedback low-pass: lower = darker, more tape-like repeats."},
+        {param::delayMix,       "Mix",      748, kRow1Y, kKnobSize, kFxPage,
          "Delay wet mix. 0 = off."},
-        {param::doubler,        "Amount",   610, kRow1Y, kKnobSize, kFxPage,
-         "Quad-track widener: two drifting ghost takes panned wide. Try 30-50% on rhythm."},
         {param::reverbRoom,     "Room",      30, kRow2Y, kKnobSize, kFxPage,
          "Reverb size / decay length."},
         {param::reverbWidth,    "Width",    116, kRow2Y, kKnobSize, kFxPage,
@@ -82,6 +86,12 @@ namespace
          "Reverb level. 0 = off."},
         {param::reverbDry,      "Dry",      460, kRow2Y, kKnobSize, kFxPage,
          "Dry signal level through the reverb stage."},
+        {param::doubler,        "Amount",   580, kRow2Y, kKnobSize, kFxPage,
+         "Quad-track widener: two drifting ghost takes panned wide. Try 30-50% on rhythm."},
+        {param::doublerSpread,  "Spread",   666, kRow2Y, kKnobSize, kFxPage,
+         "Scales the ghost-take delays: tighter slap to looser double."},
+        {param::doublerDrift,   "Drift",    752, kRow2Y, kKnobSize, kFxPage,
+         "How much the ghost takes wander in pitch, like human double-tracking."},
 
         // CAB page
         {param::irBlend,        "Blend",    790, kRow1Y + 10, kKnobSize, kCabPage,
@@ -92,7 +102,7 @@ namespace
          "Low-pass after the cab — tames fizzy IRs. Fully right = off."},
     };
 
-    constexpr int kDelayTimeKnobIndex = 20;
+    constexpr int kDelayTimeKnobIndex = 22;
 
     // Engraved section rules: small-caps title with a hairline running to x+w
     struct SectionDef { const char* title; int x; int w; int y; int page; };
@@ -106,10 +116,10 @@ namespace
         {"DYNAMICS",  678, 162, 444, kAmpPage},
         {"OUTPUT",    870,  76, 444, kAmpPage},
 
-        {"CHORUS",     30, 248, 306, kFxPage},
-        {"DELAY",     320, 248, 306, kFxPage},
-        {"DOUBLER",   610,  76, 306, kFxPage},
+        {"CHORUS",     30, 420, 306, kFxPage},
+        {"DELAY",     490, 338, 306, kFxPage},
         {"REVERB",     30, 506, 444, kFxPage},
+        {"DOUBLER",   580, 248, 444, kFxPage},
 
         {"CABINET A",  30, 400, 306, kCabPage},
         {"CABINET B", 470, 280, 306, kCabPage},
@@ -216,6 +226,13 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     boostAttachment = std::make_unique<ButtonAttachment>(processor.apvts, param::boost, boostButton);
     addAndMakeVisible(compButton);
     compAttachment = std::make_unique<ButtonAttachment>(processor.apvts, param::compOn, compButton);
+    addAndMakeVisible(pingButton);
+    pingAttachment = std::make_unique<ButtonAttachment>(processor.apvts, param::delayPingPong, pingButton);
+    pingButton.setTooltip("Ping-pong: delay repeats bounce left-right.");
+
+    addAndMakeVisible(tapButton);
+    tapButton.setTooltip("Tap the tempo: sets the delay time (and switches Sync to Free).");
+    tapButton.onClick = [this] { tapTempo(); };
 
     addAndMakeVisible(syncBox);
     for (int i = 0; i < (int)std::size(param::delaySyncChoices); ++i)
@@ -423,7 +440,9 @@ void HecateAudioProcessorEditor::Content::setPage(int newPage)
     for (auto* component : std::initializer_list<juce::Component*>{
              &gateButton, &boostButton, &compButton, &clipBox})
         component->setVisible(currentPage == kAmpPage);
-    syncBox.setVisible(currentPage == kFxPage);
+    for (auto* component : std::initializer_list<juce::Component*>{
+             &syncBox, &tapButton, &pingButton})
+        component->setVisible(currentPage == kFxPage);
     for (auto* component : std::initializer_list<juce::Component*>{
              &loadIRButton, &clearIRButton, &loadIR2Button, &clearIR2Button,
              &micBox, &positionBox, &irNameLabel, &ir2NameLabel})
@@ -878,6 +897,41 @@ void HecateAudioProcessorEditor::Content::drawEqCurve(juce::Graphics& g)
     g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved));
 }
 
+void HecateAudioProcessorEditor::Content::tapTempo()
+{
+    const double now = juce::Time::getMillisecondCounterHiRes();
+
+    if (lastTapMs > 0.0 && now - lastTapMs < 2000.0)
+    {
+        tapIntervals.add(now - lastTapMs);
+        while (tapIntervals.size() > 3)
+            tapIntervals.remove(0);
+
+        double average = 0.0;
+        for (const auto interval : tapIntervals)
+            average += interval;
+        average /= tapIntervals.size();
+
+        // Tapping implies manual time: drop out of host sync
+        if (auto* sync = processor.apvts.getParameter(param::delaySync))
+            sync->setValueNotifyingHost(0.0f);
+
+        if (auto* time = processor.apvts.getParameter(param::delayTime))
+        {
+            time->beginChangeGesture();
+            time->setValueNotifyingHost(
+                time->convertTo0to1((float)juce::jlimit(50.0, 1000.0, average)));
+            time->endChangeGesture();
+        }
+    }
+    else
+    {
+        tapIntervals.clear();
+    }
+
+    lastTapMs = now;
+}
+
 void HecateAudioProcessorEditor::Content::updateDelayTimeEnablement()
 {
     const bool freeMode = syncBox.getSelectedItemIndex() <= 0;
@@ -1062,7 +1116,9 @@ void HecateAudioProcessorEditor::Content::resized()
     boostButton.setBounds(740, 318, 56, 20);
     clipBox.setBounds(740, 348, 96, 22);
     compButton.setBounds(796, 426, 44, 16);
-    syncBox.setBounds(500, 286, 68, 20);
+    syncBox.setBounds(664, 286, 58, 20);
+    tapButton.setBounds(728, 286, 44, 20);
+    pingButton.setBounds(778, 286, 48, 20);
 
     loadIRButton.setBounds(30, 332, 120, 30);
     clearIRButton.setBounds(160, 332, 70, 30);

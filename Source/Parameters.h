@@ -27,10 +27,14 @@ namespace param
     inline constexpr const char* compRatio     = "compRatio";
     inline constexpr const char* chorusRate    = "chorusRate";
     inline constexpr const char* chorusDepth   = "chorusDepth";
+    inline constexpr const char* chorusDelay   = "chorusDelay";
+    inline constexpr const char* chorusFeedback = "chorusFeedback";
     inline constexpr const char* chorusMix     = "chorusMix";
     inline constexpr const char* delaySync     = "delaySync";
     inline constexpr const char* delayTime     = "delayTime";
     inline constexpr const char* delayFeedback = "delayFeedback";
+    inline constexpr const char* delayDamp     = "delayDamp";
+    inline constexpr const char* delayPingPong = "delayPingPong";
     inline constexpr const char* delayMix      = "delayMix";
     inline constexpr const char* reverbRoom    = "reverbRoom";
     inline constexpr const char* reverbWidth   = "reverbWidth";
@@ -42,6 +46,8 @@ namespace param
     inline constexpr const char* cabLowCut     = "cabLowCut";
     inline constexpr const char* cabHighCut    = "cabHighCut";
     inline constexpr const char* doubler       = "doubler";
+    inline constexpr const char* doublerSpread = "doublerSpread";
+    inline constexpr const char* doublerDrift  = "doublerDrift";
     inline constexpr const char* outputGain    = "outputGain";
 
     // Delay sync choice order; "Free" uses the milliseconds knob

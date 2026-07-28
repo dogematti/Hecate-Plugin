@@ -9,7 +9,8 @@ void Doubler::prepare(double newSampleRate, int maxBlockSize)
     spec.maximumBlockSize = (juce::uint32)maxBlockSize;
     spec.numChannels = 2;   // channel 0 = voice L, channel 1 = voice R
 
-    const double maxDelayMs = baseDelayRightMs + modDepthMs + 1.0;
+    // Sized for maximum spread (2x) and drift depth
+    const double maxDelayMs = baseDelayRightMs * 2.0 + 1.0 + 1.0;
     delayLine.setMaximumDelayInSamples((int)std::ceil(sampleRate * maxDelayMs * 0.001));
     delayLine.prepare(spec);
 
@@ -27,8 +28,9 @@ void Doubler::reset()
     lfoPhaseRight = juce::MathConstants<float>::pi;
 }
 
-void Doubler::process(juce::AudioBuffer<float>& buffer, float amount)
+void Doubler::process(juce::AudioBuffer<float>& buffer, float amount, float spread, float drift)
 {
+    const float depthMs = 0.1f + 0.7f * drift;
     const int numSamples = buffer.getNumSamples();
 
     // Mono bus: no stereo field to widen, but the ghost take still thickens
@@ -45,7 +47,7 @@ void Doubler::process(juce::AudioBuffer<float>& buffer, float amount)
             delayLine.pushSample(0, samples[i]);
             delayLine.pushSample(1, samples[i]);
 
-            const float delayLeft = (baseDelayLeftMs + modDepthMs * std::sin(lfoPhaseLeft)) * msToSamples;
+            const float delayLeft = (baseDelayLeftMs * spread + depthMs * std::sin(lfoPhaseLeft)) * msToSamples;
             samples[i] = samples[i] * dryGain + delayLine.popSample(0, delayLeft) * wetGain;
             delayLine.popSample(1, delayLeft);
 
@@ -70,8 +72,8 @@ void Doubler::process(juce::AudioBuffer<float>& buffer, float amount)
         delayLine.pushSample(0, mono);
         delayLine.pushSample(1, mono);
 
-        const float delayLeft = (baseDelayLeftMs + modDepthMs * std::sin(lfoPhaseLeft)) * msToSamples;
-        const float delayRight = (baseDelayRightMs + modDepthMs * std::sin(lfoPhaseRight)) * msToSamples;
+        const float delayLeft = (baseDelayLeftMs * spread + depthMs * std::sin(lfoPhaseLeft)) * msToSamples;
+        const float delayRight = (baseDelayRightMs * spread + depthMs * std::sin(lfoPhaseRight)) * msToSamples;
         const float voiceLeft = delayLine.popSample(0, delayLeft);
         const float voiceRight = delayLine.popSample(1, delayRight);
 

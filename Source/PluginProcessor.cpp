@@ -30,10 +30,14 @@ HecateAudioProcessor::HecateAudioProcessor()
     params.compRatio = apvts.getRawParameterValue(param::compRatio);
     params.chorusRate = apvts.getRawParameterValue(param::chorusRate);
     params.chorusDepth = apvts.getRawParameterValue(param::chorusDepth);
+    params.chorusDelay = apvts.getRawParameterValue(param::chorusDelay);
+    params.chorusFeedback = apvts.getRawParameterValue(param::chorusFeedback);
     params.chorusMix = apvts.getRawParameterValue(param::chorusMix);
     params.delaySync = apvts.getRawParameterValue(param::delaySync);
     params.delayTime = apvts.getRawParameterValue(param::delayTime);
     params.delayFeedback = apvts.getRawParameterValue(param::delayFeedback);
+    params.delayDamp = apvts.getRawParameterValue(param::delayDamp);
+    params.delayPingPong = apvts.getRawParameterValue(param::delayPingPong);
     params.delayMix = apvts.getRawParameterValue(param::delayMix);
     params.reverbRoom = apvts.getRawParameterValue(param::reverbRoom);
     params.reverbWidth = apvts.getRawParameterValue(param::reverbWidth);
@@ -45,6 +49,8 @@ HecateAudioProcessor::HecateAudioProcessor()
     params.cabLowCut = apvts.getRawParameterValue(param::cabLowCut);
     params.cabHighCut = apvts.getRawParameterValue(param::cabHighCut);
     params.doubler = apvts.getRawParameterValue(param::doubler);
+    params.doublerSpread = apvts.getRawParameterValue(param::doublerSpread);
+    params.doublerDrift = apvts.getRawParameterValue(param::doublerDrift);
     params.outputGain = apvts.getRawParameterValue(param::outputGain);
 }
 
@@ -189,12 +195,16 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     chorus.setRate(params.chorusRate->load());
     chorus.setDepth(params.chorusDepth->load());
+    chorus.setCentreDelay(params.chorusDelay->load());
+    chorus.setFeedback(params.chorusFeedback->load());
     chorus.setMix(params.chorusMix->load());
     chorus.process(context);
 
-    doublerFx.process(buffer, params.doubler->load());
+    doublerFx.process(buffer, params.doubler->load(), params.doublerSpread->load(),
+                      params.doublerDrift->load());
 
     delay.process(buffer, resolveDelayTimeMs(), params.delayFeedback->load(),
+                  params.delayDamp->load(), params.delayPingPong->load() > 0.5f,
                   params.delayMix->load());
     reverb.process(buffer, params.reverbRoom->load(), params.reverbWidth->load(),
                    params.reverbDamp->load(), params.reverbPreDelay->load(),

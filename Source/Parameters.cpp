@@ -118,6 +118,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                    [](float value, int) { return juce::String(value, 2) + " Hz"; })));
     params.push_back(makeParam(param::chorusDepth, "Chorus Depth",
                                {0.0f, 1.0f, 0.01f}, 0.25f, percentText()));
+    params.push_back(makeParam(param::chorusDelay, "Chorus Delay",
+                               {1.0f, 30.0f, 0.1f}, 7.0f,
+                               Attributes()
+                                   .withStringFromValueFunction(
+                                       [](float value, int) { return juce::String(value, 1) + " ms"; })
+                                   .withValueFromStringFunction(
+                                       [](const juce::String& text) { return text.getFloatValue(); })));
+    params.push_back(makeParam(param::chorusFeedback, "Chorus Feedback",
+                               {-0.95f, 0.95f, 0.01f}, 0.0f, percentText()));
     params.push_back(makeParam(param::chorusMix, "Chorus Mix",
                                {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
 
@@ -131,6 +140,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                    [](float value, int) { return juce::String(juce::roundToInt(value)) + " ms"; })));
     params.push_back(makeParam(param::delayFeedback, "Delay Feedback",
                                {0.0f, 0.9f, 0.01f}, 0.35f, percentText()));
+    {
+        juce::NormalisableRange<float> dampRange(1000.0f, 12000.0f, 10.0f);
+        dampRange.setSkewForCentre(4500.0f);
+        params.push_back(makeParam(param::delayDamp, "Delay Damping",
+                                   dampRange, 4500.0f, hertzText()));
+    }
+    params.push_back(makeBool(param::delayPingPong, "Delay Ping-Pong", false));
     params.push_back(makeParam(param::delayMix, "Delay Mix",
                                {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
 
@@ -165,6 +181,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     }
     params.push_back(makeParam(param::doubler, "Doubler",
                                {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
+    params.push_back(makeParam(param::doublerSpread, "Doubler Spread",
+                               {0.5f, 2.0f, 0.01f}, 1.0f, percentText()));
+    params.push_back(makeParam(param::doublerDrift, "Doubler Drift",
+                               {0.0f, 1.0f, 0.01f}, 0.5f, percentText()));
 
     params.push_back(makeParam(param::outputGain, "Output Gain",
                                {0.0f, 4.0f, 0.01f}, 1.0f, gainAsDecibelText()));

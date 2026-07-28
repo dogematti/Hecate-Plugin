@@ -13,12 +13,13 @@ class Doubler
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void reset();
-    void process(juce::AudioBuffer<float>& buffer, float amount);   // 0..1, 0 = fully dry
+    // amount 0..1 (0 = fully dry), spread 0.5..2 scales the ghost-take
+    // delays, drift 0..1 scales the pitch-drift depth
+    void process(juce::AudioBuffer<float>& buffer, float amount, float spread, float drift);
 
 private:
     static constexpr float baseDelayLeftMs = 14.0f;
     static constexpr float baseDelayRightMs = 19.0f;
-    static constexpr float modDepthMs = 0.4f;
     static constexpr float lfoRateLeftHz = 0.13f;
     static constexpr float lfoRateRightHz = 0.17f;
     static constexpr float voiceGain = 0.7f;
