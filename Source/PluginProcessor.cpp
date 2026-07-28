@@ -6,7 +6,7 @@ HecateAudioProcessor::HecateAudioProcessor()
     : AudioProcessor(BusesProperties()
           .withInput("Input", juce::AudioChannelSet::stereo(), true)
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "Parameters", createParameterLayout())
+      apvts(*this, &undoManager, "Parameters", createParameterLayout())
 {
     params.inputTrim = apvts.getRawParameterValue(param::inputTrim);
     params.octaveDirect = apvts.getRawParameterValue(param::octaveDirect);
@@ -50,6 +50,8 @@ HecateAudioProcessor::HecateAudioProcessor()
 
 void HecateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
+    currentSampleRate = sampleRate;
+
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRate;
     spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
@@ -83,12 +85,15 @@ void HecateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
 bool HecateAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
 {
+    const auto mainIn = layouts.getMainInputChannelSet();
     const auto mainOut = layouts.getMainOutputChannelSet();
 
     if (mainOut != juce::AudioChannelSet::mono() && mainOut != juce::AudioChannelSet::stereo())
         return false;
 
-    return mainOut == layouts.getMainInputChannelSet();
+    // Mono guitar track into a stereo bus is the typical amp-sim setup
+    return mainIn == mainOut
+           || (mainIn == juce::AudioChannelSet::mono() && mainOut == juce::AudioChannelSet::stereo());
 }
 
 // Maps the sync choice to milliseconds using the host tempo (fallback 120 BPM)
@@ -110,21 +115,38 @@ float HecateAudioProcessor::resolveDelayTimeMs()
     return (float)juce::jlimit(50.0, 1000.0, quarterMs * beatFractions[syncChoice]);
 }
 
-void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
+void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals noDenormals;
 
-    for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
-        buffer.clear(ch, 0, buffer.getNumSamples());
-
     const int numSamples = buffer.getNumSamples();
+
+    // Mono input on a stereo bus: duplicate the guitar onto the right channel
+    for (int ch = getTotalNumInputChannels(); ch < getTotalNumOutputChannels(); ++ch)
+        buffer.copyFrom(ch, 0, buffer, 0, 0, numSamples);
+
+    // MIDI program changes switch presets (deferred: parameters may not be
+    // touched from the audio thread)
+    for (const auto metadata : midi)
+    {
+        const auto message = metadata.getMessage();
+        if (message.isProgramChange())
+        {
+            const int program = message.getProgramChangeNumber();
+            juce::MessageManager::callAsync([this, program] { setCurrentProgram(program); });
+        }
+    }
 
     const float trimGain = juce::Decibels::decibelsToGain(params.inputTrim->load());
     buffer.applyGainRamp(0, numSamples, lastTrimGain, trimGain);
     lastTrimGain = trimGain;
 
+    // Meter fall is time-based (60 dB over ~0.4 s) so it looks the same at
+    // every buffer size
+    const float meterDecay = std::pow(0.001f, (float)numSamples / (float)(currentSampleRate * 0.4));
+
     meterInput.store(juce::jmax(buffer.getMagnitude(0, numSamples),
-                                meterInput.load() * 0.85f));
+                                meterInput.load() * meterDecay));
 
     if (params.gateOn->load() > 0.5f)
         meterGateOpen.store(gate.process(buffer, params.gateThreshold->load()));
@@ -173,7 +195,7 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     limiter.process(context);
 
     const float peak = buffer.getMagnitude(0, numSamples);
-    meterOutput.store(juce::jmax(peak, meterOutput.load() * 0.85f));
+    meterOutput.store(juce::jmax(peak, meterOutput.load() * meterDecay));
 }
 
 int HecateAudioProcessor::getNumPrograms()
@@ -187,7 +209,13 @@ void HecateAudioProcessor::setCurrentProgram(int index)
         return;
 
     currentProgram = index;
-    applyFactoryPreset(apvts, index);
+
+    // Hosts may call this from any thread; parameter writes belong on the
+    // message thread
+    if (juce::MessageManager::getInstance()->isThisTheMessageThread())
+        applyFactoryPreset(apvts, index);
+    else
+        juce::MessageManager::callAsync([this, index] { applyFactoryPreset(apvts, index); });
 }
 
 const juce::String HecateAudioProcessor::getProgramName(int index)
@@ -214,7 +242,7 @@ void HecateAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     const auto xmlString = juce::String::fromUTF8((const char*)data, sizeInBytes);
     if (auto xml = juce::XmlDocument::parse(xmlString))
     {
-        apvts.state = juce::ValueTree::fromXml(*xml);
+        apvts.replaceState(juce::ValueTree::fromXml(*xml));
         reloadImpulseResponsesFromState();
     }
 }
@@ -228,7 +256,8 @@ void HecateAudioProcessor::reloadImpulseResponsesFromState()
         const auto irPath = apvts.state.getProperty(pathProperties[slot]).toString();
         if (irPath.isEmpty())
         {
-            clearImpulseResponse(slot);
+            if (cabinet.isUserLoaded(slot))
+                clearImpulseResponse(slot);
             continue;
         }
 
@@ -240,10 +269,17 @@ void HecateAudioProcessor::reloadImpulseResponsesFromState()
                          .getChildFile("Hecate").getChildFile("IRs")
                          .getChildFile(irFile.getFileName());
 
+        // Skip redundant reloads: they cost disk I/O and momentarily cut the
+        // convolution tail (e.g. on every A/B toggle)
         if (irFile.existsAsFile())
-            loadImpulseResponse(irFile, slot);
-        else
+        {
+            if (loadedIrPaths[slot] != irFile.getFullPathName())
+                loadImpulseResponse(irFile, slot);
+        }
+        else if (cabinet.isUserLoaded(slot))
+        {
             clearImpulseResponse(slot);
+        }
     }
 }
 
@@ -251,13 +287,17 @@ void HecateAudioProcessor::loadImpulseResponse(const juce::File& file, int slot)
 {
     cabinet.loadImpulseResponse(file, slot);
     if (cabinet.isUserLoaded(slot))
+    {
+        loadedIrPaths[slot] = file.getFullPathName();
         apvts.state.setProperty(slot == 0 ? "irPath" : "irPath2",
                                 file.getFullPathName(), nullptr);
+    }
 }
 
 void HecateAudioProcessor::clearImpulseResponse(int slot)
 {
     cabinet.clearSlot(slot);
+    loadedIrPaths[slot].clear();
     apvts.state.removeProperty(slot == 0 ? "irPath" : "irPath2", nullptr);
 }
 

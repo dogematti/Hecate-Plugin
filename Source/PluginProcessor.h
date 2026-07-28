@@ -34,7 +34,7 @@ public:
     bool hasEditor() const override { return true; }
 
     const juce::String getName() const override { return "Hecate"; }
-    bool acceptsMidi() const override { return false; }
+    bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override { return 10.0; }
@@ -62,6 +62,10 @@ public:
     float getGainReductionDb() const { return compressor.getGainReductionDb(); }
     bool isGateOpen() const { return meterGateOpen.load(); }
 
+    juce::UndoManager& getUndoManager() { return undoManager; }
+
+    // Declared before apvts, which is constructed with a pointer to it
+    juce::UndoManager undoManager;
     juce::AudioProcessorValueTreeState apvts;
 
 private:
@@ -130,6 +134,11 @@ private:
     float lastOutputGain = 1.0f;
 
     int currentProgram = 0;
+    double currentSampleRate = 44100.0;
+
+    // Which files are actually loaded per cab slot, so redundant reloads
+    // (e.g. every A/B toggle) can be skipped
+    juce::String loadedIrPaths[2];
 
     std::atomic<float> meterInput{0.0f};
     std::atomic<float> meterOutput{0.0f};

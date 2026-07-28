@@ -41,6 +41,10 @@ void Saturator::prepare(double newSampleRate, int maxBlockSize)
 
     lowBandBuffer.setSize(2, maxBlockSize);
 
+    lowBandDelaySamples = oversampler->getLatencyInSamples();
+    lowBandDelay.setMaximumDelayInSamples((int)std::ceil(lowBandDelaySamples) + 8);
+    lowBandDelay.prepare(spec);
+
     const double oversampledRate = sampleRate * 4.0;
 
     splitCoeff = onePoleCoeff(splitCrossoverHz, sampleRate);
@@ -67,6 +71,7 @@ void Saturator::reset()
         oversampler->reset();
 
     lowBandBuffer.clear();
+    lowBandDelay.reset();
 
     for (int ch = 0; ch < 2; ++ch)
     {
@@ -114,7 +119,12 @@ void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tigh
         {
             const float x = samples[i];
             state += splitCoeff * (x - state);
-            lowOut[i] = std::tanh(state * lowBandDrive) / lowBandDrive * lowBandMakeup;
+            const float saturatedLow = std::tanh(state * lowBandDrive) / lowBandDrive * lowBandMakeup;
+
+            // Match the high band's oversampler latency
+            lowBandDelay.pushSample(ch, saturatedLow);
+            lowOut[i] = lowBandDelay.popSample(ch, lowBandDelaySamples);
+
             samples[i] = x - state;
         }
 

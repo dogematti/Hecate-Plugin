@@ -4,28 +4,42 @@ namespace
 {
     using Attributes = juce::AudioParameterFloatAttributes;
 
+    // Every attribute set defines BOTH directions so typed entry ("-42 dB",
+    // "450 Hz", "35 %") parses in hosts and in the UI
     Attributes decibelText()
     {
-        return Attributes().withStringFromValueFunction(
-            [](float value, int) { return juce::String(value, 1) + " dB"; });
+        return Attributes()
+            .withStringFromValueFunction(
+                [](float value, int) { return juce::String(value, 1) + " dB"; })
+            .withValueFromStringFunction(
+                [](const juce::String& text) { return text.getFloatValue(); });
     }
 
     Attributes gainAsDecibelText()
     {
-        return Attributes().withStringFromValueFunction(
-            [](float value, int) { return juce::String(juce::Decibels::gainToDecibels(value), 1) + " dB"; });
+        return Attributes()
+            .withStringFromValueFunction(
+                [](float value, int) { return juce::String(juce::Decibels::gainToDecibels(value), 1) + " dB"; })
+            .withValueFromStringFunction(
+                [](const juce::String& text) { return juce::Decibels::decibelsToGain(text.getFloatValue()); });
     }
 
     Attributes percentText()
     {
-        return Attributes().withStringFromValueFunction(
-            [](float value, int) { return juce::String(juce::roundToInt(value * 100.0f)) + " %"; });
+        return Attributes()
+            .withStringFromValueFunction(
+                [](float value, int) { return juce::String(juce::roundToInt(value * 100.0f)) + " %"; })
+            .withValueFromStringFunction(
+                [](const juce::String& text) { return text.getFloatValue() * 0.01f; });
     }
 
     Attributes hertzText()
     {
-        return Attributes().withStringFromValueFunction(
-            [](float value, int) { return juce::String(juce::roundToInt(value)) + " Hz"; });
+        return Attributes()
+            .withStringFromValueFunction(
+                [](float value, int) { return juce::String(juce::roundToInt(value)) + " Hz"; })
+            .withValueFromStringFunction(
+                [](const juce::String& text) { return text.getFloatValue(); });
     }
 
     std::unique_ptr<juce::AudioParameterFloat> makeParam(const char* id, const char* name,
@@ -92,8 +106,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                {-60.0f, 0.0f, 0.1f}, -24.0f, decibelText()));
     params.push_back(makeParam(param::compRatio, "Comp Ratio",
                                {1.0f, 16.0f, 0.1f}, 4.0f,
-                               Attributes().withStringFromValueFunction(
-                                   [](float value, int) { return juce::String(value, 1) + ":1"; })));
+                               Attributes()
+                                   .withStringFromValueFunction(
+                                       [](float value, int) { return juce::String(value, 1) + ":1"; })
+                                   .withValueFromStringFunction(
+                                       [](const juce::String& text) { return text.getFloatValue(); })));
 
     params.push_back(makeParam(param::chorusRate, "Chorus Rate",
                                {0.1f, 5.0f, 0.01f}, 1.0f,

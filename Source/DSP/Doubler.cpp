@@ -29,10 +29,33 @@ void Doubler::reset()
 
 void Doubler::process(juce::AudioBuffer<float>& buffer, float amount)
 {
-    if (buffer.getNumChannels() < 2)
-        return;
-
     const int numSamples = buffer.getNumSamples();
+
+    // Mono bus: no stereo field to widen, but the ghost take still thickens
+    if (buffer.getNumChannels() < 2)
+    {
+        auto* samples = buffer.getWritePointer(0);
+        const float msToSamples = (float)(sampleRate * 0.001);
+        const float dryGain = 1.0f - amount * dryDuck;
+        const float wetGain = amount * voiceGain;
+        const float twoPi = juce::MathConstants<float>::twoPi;
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            delayLine.pushSample(0, samples[i]);
+            delayLine.pushSample(1, samples[i]);
+
+            const float delayLeft = (baseDelayLeftMs + modDepthMs * std::sin(lfoPhaseLeft)) * msToSamples;
+            samples[i] = samples[i] * dryGain + delayLine.popSample(0, delayLeft) * wetGain;
+            delayLine.popSample(1, delayLeft);
+
+            lfoPhaseLeft += lfoIncrementLeft;
+            if (lfoPhaseLeft >= twoPi)
+                lfoPhaseLeft -= twoPi;
+        }
+        return;
+    }
+
     auto* left = buffer.getWritePointer(0);
     auto* right = buffer.getWritePointer(1);
 

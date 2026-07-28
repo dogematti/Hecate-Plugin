@@ -96,8 +96,14 @@ void StereoReverb::process(juce::AudioBuffer<float>& buffer, float roomSize, flo
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const float inL = left[i];
-        const float inR = stereo ? right[i] : inL;
+        // Sanitize before anything enters the feedback loops: one NaN in the
+        // combs would circulate forever and mute the plugin until prepare()
+        float inL = left[i];
+        if (!std::isfinite(inL))
+            inL = 0.0f;
+        float inR = stereo ? right[i] : inL;
+        if (!std::isfinite(inR))
+            inR = 0.0f;
 
         // Pre-delay pushes the tail behind the riff
         preDelayBuffer[(size_t)preDelayWriteIndex] = (inL + inR) * 0.5f * inputGain;

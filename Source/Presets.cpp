@@ -94,19 +94,37 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     return presets;
 }
 
+// Single pass, gestured: each parameter is set exactly once (override merged
+// with default) so the audio thread never renders a half-applied preset, and
+// hosts recording automation see proper begin/end gestures.
 void applyFactoryPreset(juce::AudioProcessorValueTreeState& apvts, int index)
 {
     const auto& presets = getFactoryPresets();
     if (index < 0 || index >= (int)presets.size())
         return;
 
-    for (auto* parameter : apvts.processor.getParameters())
-        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter))
-            ranged->setValueNotifyingHost(ranged->getDefaultValue());
+    const auto& values = presets[(size_t)index].values;
 
-    for (const auto& [id, value] : presets[(size_t)index].values)
-        if (auto* parameter = apvts.getParameter(id))
-            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+    for (auto* parameter : apvts.processor.getParameters())
+    {
+        auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter);
+        if (ranged == nullptr)
+            continue;
+
+        float normalised = ranged->getDefaultValue();
+        for (const auto& [id, value] : values)
+        {
+            if (ranged->paramID == id)
+            {
+                normalised = ranged->convertTo0to1(value);
+                break;
+            }
+        }
+
+        ranged->beginChangeGesture();
+        ranged->setValueNotifyingHost(normalised);
+        ranged->endChangeGesture();
+    }
 }
 
 juce::File getUserPresetDirectory()

@@ -13,48 +13,81 @@ namespace
     constexpr int kRow1Y = 322, kRow2Y = 460;
     constexpr int kKnobSize = 76, kHeroSize = 100;
 
-    struct KnobDef { const char* id; const char* caption; int x; int y; int size; int page; };
+    struct KnobDef { const char* id; const char* caption; int x; int y; int size; int page; const char* tip; };
 
     constexpr KnobDef kKnobDefs[] = {
         // AMP page — row 1: input chain into the hero gain
-        {param::inputTrim,      "Trim",      30, kRow1Y, kKnobSize, kAmpPage},
-        {param::octaveDirect,   "Direct",   116, kRow1Y, kKnobSize, kAmpPage},
-        {param::octaveLevel,    "Octave",   202, kRow1Y, kKnobSize, kAmpPage},
-        {param::gateThreshold,  "Gate",     288, kRow1Y, kKnobSize, kAmpPage},
-        {param::gain,           "Gain",     410, kRow1Y - 10, kHeroSize, kAmpPage},
-        {param::tight,          "Tight",    542, kRow1Y, kKnobSize, kAmpPage},
-        {param::tone,           "Tone",     628, kRow1Y, kKnobSize, kAmpPage},
+        {param::inputTrim,      "Trim",      30, kRow1Y, kKnobSize, kAmpPage,
+         "Input level into the plugin (+/-12 dB). Set so hard picking just reaches the top of the IN meter."},
+        {param::octaveDirect,   "Direct",   116, kRow1Y, kKnobSize, kAmpPage,
+         "Level of the unprocessed guitar. Turn down with Octave up to play the sub-octave voice alone."},
+        {param::octaveLevel,    "Octave",   202, kRow1Y, kKnobSize, kAmpPage,
+         "Level of the octave-down voice, like an octave pedal before the amp."},
+        {param::gateThreshold,  "Gate",     288, kRow1Y, kKnobSize, kAmpPage,
+         "Noise gate threshold. Raise until silence between chugs; the header LED shows gate state."},
+        {param::gain,           "Gain",     410, kRow1Y - 10, kHeroSize, kAmpPage,
+         "Preamp drive (+12 to +60 dB). Modern metal uses moderate gain plus Boost, not maximum."},
+        {param::tight,          "Tight",    542, kRow1Y, kKnobSize, kAmpPage,
+         "Pre-drive low cut (40-300 Hz). Higher = tighter chugs; restore weight with Depth."},
+        {param::tone,           "Tone",     628, kRow1Y, kKnobSize, kAmpPage,
+         "Post-drive brightness sweep, dark to bright."},
         // AMP page — row 2
-        {param::bass,           "Bass",      30, kRow2Y, kKnobSize, kAmpPage},
-        {param::mid,            "Mid",      116, kRow2Y, kKnobSize, kAmpPage},
-        {param::midFreq,        "Freq",     202, kRow2Y, kKnobSize, kAmpPage},
-        {param::treble,         "Treble",   288, kRow2Y, kKnobSize, kAmpPage},
-        {param::presence,       "Presence", 400, kRow2Y, kKnobSize, kAmpPage},
-        {param::sag,            "Sag",      486, kRow2Y, kKnobSize, kAmpPage},
-        {param::depth,          "Depth",    572, kRow2Y, kKnobSize, kAmpPage},
-        {param::compThreshold,  "Thresh",   678, kRow2Y, kKnobSize, kAmpPage},
-        {param::compRatio,      "Ratio",    764, kRow2Y, kKnobSize, kAmpPage},
-        {param::outputGain,     "Output",   870, kRow2Y, kKnobSize, kAmpPage},
+        {param::bass,           "Bass",      30, kRow2Y, kKnobSize, kAmpPage,
+         "Low shelf at 100 Hz."},
+        {param::mid,            "Mid",      116, kRow2Y, kKnobSize, kAmpPage,
+         "Mid bell cut/boost at the Freq knob's frequency. Metal scoops: -4 to -7 dB around 400-500 Hz."},
+        {param::midFreq,        "Freq",     202, kRow2Y, kKnobSize, kAmpPage,
+         "Centre of the Mid bell (250 Hz - 2 kHz). Scoop low-mids; keep 700 Hz+ to cut through a mix."},
+        {param::treble,         "Treble",   288, kRow2Y, kKnobSize, kAmpPage,
+         "High shelf at 8 kHz."},
+        {param::presence,       "Presence", 400, kRow2Y, kKnobSize, kAmpPage,
+         "Power-amp high shelf at 3.5 kHz — edge and articulation."},
+        {param::sag,            "Sag",      486, kRow2Y, kKnobSize, kAmpPage,
+         "Power-supply sag: touch-sensitive bloom under hard picking."},
+        {param::depth,          "Depth",    572, kRow2Y, kKnobSize, kAmpPage,
+         "Power-amp resonance at 100 Hz — chest thump. The partner of the Tight knob."},
+        {param::compThreshold,  "Thresh",   678, kRow2Y, kKnobSize, kAmpPage,
+         "Compressor threshold (pre-drive sustain compressor; enable with ON)."},
+        {param::compRatio,      "Ratio",    764, kRow2Y, kKnobSize, kAmpPage,
+         "Compression ratio."},
+        {param::outputGain,     "Output",   870, kRow2Y, kKnobSize, kAmpPage,
+         "Final level. A safety limiter after this stops host clipping."},
 
         // FX page
-        {param::chorusRate,     "Rate",      30, kRow1Y, kKnobSize, kFxPage},
-        {param::chorusDepth,    "Depth",    116, kRow1Y, kKnobSize, kFxPage},
-        {param::chorusMix,      "Mix",      202, kRow1Y, kKnobSize, kFxPage},
-        {param::delayTime,      "Time",     320, kRow1Y, kKnobSize, kFxPage},
-        {param::delayFeedback,  "Feedback", 406, kRow1Y, kKnobSize, kFxPage},
-        {param::delayMix,       "Mix",      492, kRow1Y, kKnobSize, kFxPage},
-        {param::doubler,        "Amount",   610, kRow1Y, kKnobSize, kFxPage},
-        {param::reverbRoom,     "Room",      30, kRow2Y, kKnobSize, kFxPage},
-        {param::reverbWidth,    "Width",    116, kRow2Y, kKnobSize, kFxPage},
-        {param::reverbDamp,     "Damping",  202, kRow2Y, kKnobSize, kFxPage},
-        {param::reverbPreDelay, "Pre-Dly",  288, kRow2Y, kKnobSize, kFxPage},
-        {param::reverbWet,      "Wet",      374, kRow2Y, kKnobSize, kFxPage},
-        {param::reverbDry,      "Dry",      460, kRow2Y, kKnobSize, kFxPage},
+        {param::chorusRate,     "Rate",      30, kRow1Y, kKnobSize, kFxPage,
+         "Chorus LFO speed."},
+        {param::chorusDepth,    "Depth",    116, kRow1Y, kKnobSize, kFxPage,
+         "Chorus modulation depth."},
+        {param::chorusMix,      "Mix",      202, kRow1Y, kKnobSize, kFxPage,
+         "Chorus wet mix. 0 = off."},
+        {param::delayTime,      "Time",     320, kRow1Y, kKnobSize, kFxPage,
+         "Delay time in ms. Disabled when Sync is not Free."},
+        {param::delayFeedback,  "Feedback", 406, kRow1Y, kKnobSize, kFxPage,
+         "Delay repeats; the feedback path darkens each repeat."},
+        {param::delayMix,       "Mix",      492, kRow1Y, kKnobSize, kFxPage,
+         "Delay wet mix. 0 = off."},
+        {param::doubler,        "Amount",   610, kRow1Y, kKnobSize, kFxPage,
+         "Quad-track widener: two drifting ghost takes panned wide. Try 30-50% on rhythm."},
+        {param::reverbRoom,     "Room",      30, kRow2Y, kKnobSize, kFxPage,
+         "Reverb size / decay length."},
+        {param::reverbWidth,    "Width",    116, kRow2Y, kKnobSize, kFxPage,
+         "Stereo width of the reverb tail."},
+        {param::reverbDamp,     "Damping",  202, kRow2Y, kKnobSize, kFxPage,
+         "High-frequency absorption of the tail."},
+        {param::reverbPreDelay, "Pre-Dly",  288, kRow2Y, kKnobSize, kFxPage,
+         "Gap before the tail starts — keeps the riff in front of the reverb."},
+        {param::reverbWet,      "Wet",      374, kRow2Y, kKnobSize, kFxPage,
+         "Reverb level. 0 = off."},
+        {param::reverbDry,      "Dry",      460, kRow2Y, kKnobSize, kFxPage,
+         "Dry signal level through the reverb stage."},
 
         // CAB page
-        {param::irBlend,        "Blend",    790, kRow1Y + 10, kKnobSize, kCabPage},
-        {param::cabLowCut,      "Low Cut",  790, kRow2Y, kKnobSize, kCabPage},
-        {param::cabHighCut,     "High Cut", 876, kRow2Y, kKnobSize, kCabPage},
+        {param::irBlend,        "Blend",    790, kRow1Y + 10, kKnobSize, kCabPage,
+         "Equal-power blend between cabinet A and B. Only active when B is loaded."},
+        {param::cabLowCut,      "Low Cut",  790, kRow2Y, kKnobSize, kCabPage,
+         "High-pass after the cab — tames boomy IRs. Fully left = off."},
+        {param::cabHighCut,     "High Cut", 876, kRow2Y, kKnobSize, kCabPage,
+         "Low-pass after the cab — tames fizzy IRs. Fully right = off."},
     };
 
     constexpr int kDelayTimeKnobIndex = 20;
@@ -145,9 +178,21 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     for (const auto& def : kKnobDefs)
     {
         knobs.push_back(std::make_unique<Knob>(processor.apvts, def.id, def.caption, this));
+        knobs.back()->slider.setTooltip(def.tip);
         addAndMakeVisible(knobs.back()->slider);
         addAndMakeVisible(knobs.back()->label);
     }
+
+    // Dirty tracking: listen to every parameter
+    for (auto* parameter : processor.getParameters())
+        if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter))
+            listenedParameterIds.add(ranged->paramID);
+    for (const auto& id : listenedParameterIds)
+        processor.apvts.addParameterListener(id, this);
+
+    // A/B starts with both slots holding the current state
+    abStates[0] = processor.apvts.copyState();
+    abStates[1] = processor.apvts.copyState();
 
     using ButtonAttachment = juce::AudioProcessorValueTreeState::ButtonAttachment;
     using ComboBoxAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
@@ -172,14 +217,21 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     clipAttachment = std::make_unique<ComboBoxAttachment>(processor.apvts, param::clipMode, clipBox);
 
     addAndMakeVisible(presetBox);
-    presetBox.setTextWhenNothingSelected("Presets...");
+    presetBox.setTextWhenNothingSelected("Default");
+    presetBox.setTooltip("Factory and user presets. * marks unsaved edits.");
     presetBox.onChange = [this]
     {
         const int id = presetBox.getSelectedId();
         if (id >= kUserPresetIdOffset)
+        {
             loadUserPreset(userPresetFiles[id - kUserPresetIdOffset]);
+        }
         else if (id >= kFactoryPresetIdOffset)
-            processor.setCurrentProgram(id - kFactoryPresetIdOffset);
+        {
+            const int program = id - kFactoryPresetIdOffset;
+            processor.setCurrentProgram(program);
+            markPresetLoaded(getFactoryPresets()[(size_t)program].name, {});
+        }
     };
     refreshPresetBox();
 
@@ -189,8 +241,17 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     nextPresetButton.onClick = [this] { selectFactoryPreset(1); };
 
     addAndMakeVisible(savePresetButton);
+    savePresetButton.setTooltip("Save the current sound. Overwrites the loaded user preset, or asks for a name.");
     savePresetButton.onClick = [this]
     {
+        // Save-in-place when a user preset is loaded; save-as otherwise
+        if (currentUserPresetFile.existsAsFile())
+        {
+            currentUserPresetFile.replaceWithText(processor.apvts.state.toXmlString());
+            markPresetLoaded(currentUserPresetFile.getFileNameWithoutExtension(), currentUserPresetFile);
+            return;
+        }
+
         fileChooser = std::make_unique<juce::FileChooser>(
             "Save preset", getUserPresetDirectory().getChildFile("MyPreset.xml"), "*.xml");
         fileChooser->launchAsync(
@@ -202,6 +263,7 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
                     return;
                 file.replaceWithText(processor.apvts.state.toXmlString());
                 refreshPresetBox();
+                markPresetLoaded(file.getFileNameWithoutExtension(), file);
             });
     };
 
@@ -267,11 +329,54 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     positionBox.setTextWhenNoChoicesAvailable("-");
     positionBox.onChange = [this] { positionChanged(); };
 
+    abButton.setTooltip("Compare two settings: edits go to the shown slot, click to switch.");
+    boostButton.setTooltip("Screamer-style boost: pre-clip low cut plus a 750 Hz push. The metal recipe.");
+    gateButton.setTooltip("Noise gate on/off.");
+    compButton.setTooltip("Sustain compressor on/off (sits before the drive).");
+    clipBox.setTooltip("Output stage voicing: Tube (soft), Modern (tight), Fuzz (doom).");
+    syncBox.setTooltip("Delay sync: Free uses the Time knob, note values follow the host tempo.");
+
     updateIRLabels();
     refreshIRBrowser();
     setPage(kAmpPage);
+    markPresetLoaded("Default", {});
 
     setSize(kCanvasW, kCanvasH);
+}
+
+HecateAudioProcessorEditor::Content::~Content()
+{
+    for (const auto& id : listenedParameterIds)
+        processor.apvts.removeParameterListener(id, this);
+}
+
+void HecateAudioProcessorEditor::Content::markPresetLoaded(const juce::String& name,
+                                                           const juce::File& userFile)
+{
+    currentPresetName = name;
+    currentUserPresetFile = userFile;
+    shownProgram = processor.getCurrentProgram();
+    dirtyFlag.store(false);
+    showingDirty = false;
+    presetBox.setSelectedId(0, juce::dontSendNotification);
+    presetBox.setTextWhenNothingSelected(name);
+    presetBox.repaint();
+}
+
+void HecateAudioProcessorEditor::Content::updateHeaderState()
+{
+    // Follow host-initiated program changes (MIDI, DAW program lane)
+    const int program = processor.getCurrentProgram();
+    if (program != shownProgram)
+        markPresetLoaded(getFactoryPresets()[(size_t)program].name, {});
+
+    const bool dirty = dirtyFlag.load();
+    if (dirty != showingDirty)
+    {
+        showingDirty = dirty;
+        presetBox.setTextWhenNothingSelected(currentPresetName + (dirty ? " *" : ""));
+        presetBox.repaint();
+    }
 }
 
 void HecateAudioProcessorEditor::Content::setPage(int newPage)
@@ -351,14 +456,36 @@ void HecateAudioProcessorEditor::Content::loadUserPreset(const juce::File& file)
         processor.reloadImpulseResponsesFromState();
         updateIRLabels();
         refreshIRBrowser();
+        markPresetLoaded(file.getFileNameWithoutExtension(), file);
     }
 }
 
 void HecateAudioProcessorEditor::Content::updateIRLabels()
 {
-    irNameLabel.setText(processor.getImpulseResponseName(0), juce::dontSendNotification);
-    const auto nameB = processor.getImpulseResponseName(1);
-    ir2NameLabel.setText(nameB.isNotEmpty() ? nameB : "Empty", juce::dontSendNotification);
+    const juce::Colour missing(0xffc85450);
+    const char* pathProperties[] = {"irPath", "irPath2"};
+    juce::Label* labels[] = {&irNameLabel, &ir2NameLabel};
+
+    for (int slot = 0; slot < 2; ++slot)
+    {
+        const auto irPath = processor.apvts.state.getProperty(pathProperties[slot]).toString();
+        const bool loaded = processor.isUserImpulseResponseLoaded(slot);
+
+        if (irPath.isNotEmpty() && !loaded)
+        {
+            // The preset/session references an IR this machine doesn't have
+            labels[slot]->setText("Missing: " + juce::File(irPath).getFileName()
+                                      + " — use Load IR to relocate",
+                                  juce::dontSendNotification);
+            labels[slot]->setColour(juce::Label::textColourId, missing);
+        }
+        else
+        {
+            const auto name = processor.getImpulseResponseName(slot);
+            labels[slot]->setText(name.isNotEmpty() ? name : "Empty", juce::dontSendNotification);
+            labels[slot]->setColour(juce::Label::textColourId, HecateLookAndFeel::textDim);
+        }
+    }
 }
 
 void HecateAudioProcessorEditor::Content::refreshIRBrowser()
@@ -481,6 +608,12 @@ void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
     g.setFont(juce::Font(juce::FontOptions(22.0f, juce::Font::bold)).withExtraKerningFactor(0.42f));
     g.drawText("HECATE", 20, 8, 170, 28, juce::Justification::centredLeft, false);
 
+#ifdef HECATE_VERSION
+    g.setColour(HecateLookAndFeel::textDim.withAlpha(0.8f));
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.drawText("v" HECATE_VERSION, 22, 36, 160, 11, juce::Justification::centredLeft, false);
+#endif
+
     // Engraved section rules
     for (const auto& section : kSections)
     {
@@ -593,6 +726,7 @@ HecateAudioProcessorEditor::HecateAudioProcessorEditor(HecateAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), content(p)
 {
     setLookAndFeel(&lookAndFeel);
+    setWantsKeyboardFocus(true);
     addAndMakeVisible(content);
 
     setResizable(true, true);
@@ -623,4 +757,18 @@ void HecateAudioProcessorEditor::resized()
 void HecateAudioProcessorEditor::timerCallback()
 {
     content.repaint(kMetersArea);
+    content.updateHeaderState();
+}
+
+bool HecateAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
+{
+    auto& undoManager = processor.getUndoManager();
+
+    if (key == juce::KeyPress('z', juce::ModifierKeys::commandModifier, 0))
+        return undoManager.undo();
+    if (key == juce::KeyPress('z', juce::ModifierKeys::commandModifier
+                                       | juce::ModifierKeys::shiftModifier, 0))
+        return undoManager.redo();
+
+    return false;
 }

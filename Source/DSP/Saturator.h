@@ -82,6 +82,11 @@ private:
     // Pre-allocated in prepare; process() must never allocate
     juce::AudioBuffer<float> lowBandBuffer;
 
+    // The high band picks up the oversampler's (fractional) latency; the low
+    // band is delayed to match so the two stay time-aligned when recombined
+    juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd> lowBandDelay;
+    float lowBandDelaySamples = 0.0f;
+
     // Per-channel one-pole states at the base rate
     float splitState[2] = {0.0f, 0.0f};
     float screamerHpState[2] = {0.0f, 0.0f};

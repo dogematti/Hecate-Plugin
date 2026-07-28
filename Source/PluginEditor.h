@@ -17,15 +17,20 @@ public:
 private:
     // All controls live on a fixed 1020x612 canvas; the editor scales it
     // as a whole when the window is resized.
-    class Content : public juce::Component
+    class Content : public juce::Component,
+                    private juce::AudioProcessorValueTreeState::Listener
     {
     public:
         explicit Content(HecateAudioProcessor&);
+        ~Content() override;
 
         void paint(juce::Graphics&) override;
         void resized() override;
 
         void refreshPresetBox();
+
+        // Called from the editor's timer: dirty asterisk + host program sync
+        void updateHeaderState();
 
     private:
         // One rotary control: slider + caption + parameter attachment
@@ -39,7 +44,10 @@ private:
             juce::AudioProcessorValueTreeState::SliderAttachment attachment;
         };
 
+        void parameterChanged(const juce::String&, float) override { dirtyFlag.store(true); }
+
         void loadUserPreset(const juce::File& file);
+        void markPresetLoaded(const juce::String& name, const juce::File& userFile);
         void updateDelayTimeEnablement();
         void updateIRLabels();
         void drawMeters(juce::Graphics& g);
@@ -74,6 +82,15 @@ private:
         juce::ValueTree abStates[2];
         int abIndex = 0;
 
+        // Preset bookkeeping: name shown in the combo, the file behind a
+        // loaded user preset (empty for factory), dirty tracking
+        juce::String currentPresetName{"Default"};
+        juce::File currentUserPresetFile;
+        juce::StringArray listenedParameterIds;
+        std::atomic<bool> dirtyFlag{false};
+        bool showingDirty = false;
+        int shownProgram = 0;
+
         juce::TextButton ampTabButton{"AMP"}, fxTabButton{"FX"}, cabTabButton{"CAB"};
         int currentPage = 0;
 
@@ -88,10 +105,12 @@ private:
     };
 
     void timerCallback() override;
+    bool keyPressed(const juce::KeyPress& key) override;
 
     HecateAudioProcessor& processor;
     HecateLookAndFeel lookAndFeel;
     Content content;
+    juce::TooltipWindow tooltipWindow{this, 700};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HecateAudioProcessorEditor)
 };

@@ -162,10 +162,12 @@ void CabinetSimulator::clearSlot(int slot)
     }
     else if (slot == 1)
     {
-        userLoadedB.store(false);   // process() stops touching B immediately
+        // process() stops touching B immediately; no reset() here — it isn't
+        // safe to call concurrently with the audio thread, the stale tail is
+        // never rendered again, and prepare() resets the engine anyway
+        userLoadedB.store(false);
         userFileB = juce::File();
         nameB.clear();
-        convolutionB.reset();
     }
 }
 
