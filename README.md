@@ -55,8 +55,11 @@ them in `~/Documents/Hecate/IRs`.
 
 Three tabs — **AMP**, **FX** and **CAB** — over the artwork at its native
 aspect ratio. Header: preset menu with prev/next arrows, save, **A/B compare**,
-and always-visible in/out/GR meters plus a gate LED. Resizable 50–200%,
-double-click-to-default knobs, drag popups for values.
+a **chromatic tuner**, and always-visible in/out/GR meters plus a gate LED.
+The CAB tab plots the **frequency response of both IR slots** with live trim
+markers, and dragging any EQ or power-section knob overlays the combined
+tone curve. Resizable 50–200%, double-click-to-default knobs, tooltips
+everywhere, undo/redo with Cmd+Z.
 
 ## Presets
 

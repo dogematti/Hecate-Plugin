@@ -46,6 +46,11 @@ private:
 
         void parameterChanged(const juce::String&, float) override { dirtyFlag.store(true); }
 
+        void updateTuner();
+        void drawTuner(juce::Graphics&);
+        void drawEqCurve(juce::Graphics&);
+        void rebuildIRCurves();
+
         void loadUserPreset(const juce::File& file);
         void markPresetLoaded(const juce::String& name, const juce::File& userFile);
         void updateDelayTimeEnablement();
@@ -100,6 +105,20 @@ private:
         juce::ComboBox micBox, positionBox;
         juce::Array<juce::File> micDirs, positionFiles;
         std::unique_ptr<juce::FileChooser> fileChooser;
+
+        // Tuner: pulls the processor's input tap, YIN-style detection
+        juce::TextButton tunerButton{"TUNER"};
+        std::vector<float> tunerSamples = std::vector<float>(4096, 0.0f);
+        juce::String tunerNote;
+        float tunerCents = 0.0f;
+        float tunerFrequency = 0.0f;
+        bool tunerHasPitch = false;
+
+        // EQ curve overlay shows while an EQ/power knob is dragged
+        int eqDragCount = 0;
+
+        // Cabinet response curves, rebuilt on IR changes
+        juce::Path irCurveA, irCurveB;
 
         friend class HecateAudioProcessorEditor;
     };

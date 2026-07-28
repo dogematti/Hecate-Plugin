@@ -148,6 +148,19 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     meterInput.store(juce::jmax(buffer.getMagnitude(0, numSamples),
                                 meterInput.load() * meterDecay));
 
+    // Feed the tuner tap (raw post-trim guitar, channel 0)
+    {
+        const auto* raw = buffer.getReadPointer(0);
+        int pos = tunerWritePos.load(std::memory_order_relaxed);
+        for (int i = 0; i < numSamples; ++i)
+        {
+            tunerRing[(size_t)pos] = raw[i];
+            if (++pos >= (int)tunerRing.size())
+                pos = 0;
+        }
+        tunerWritePos.store(pos, std::memory_order_release);
+    }
+
     if (params.gateOn->load() > 0.5f)
         meterGateOpen.store(gate.process(buffer, params.gateThreshold->load()));
     else
@@ -299,6 +312,21 @@ void HecateAudioProcessor::clearImpulseResponse(int slot)
     cabinet.clearSlot(slot);
     loadedIrPaths[slot].clear();
     apvts.state.removeProperty(slot == 0 ? "irPath" : "irPath2", nullptr);
+}
+
+void HecateAudioProcessor::readTunerBuffer(float* dest, int numSamples) const
+{
+    const int size = (int)tunerRing.size();
+    int pos = tunerWritePos.load(std::memory_order_acquire) - numSamples;
+    while (pos < 0)
+        pos += size;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        dest[i] = tunerRing[(size_t)pos];
+        if (++pos >= size)
+            pos = 0;
+    }
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

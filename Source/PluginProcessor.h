@@ -56,6 +56,11 @@ public:
     // Re-loads both IR slots from the "irPath"/"irPath2" state properties
     void reloadImpulseResponsesFromState();
 
+    // Editor support: built-in cab IR for the response display, and a tap of
+    // the raw (post-trim) input for the tuner
+    const juce::AudioBuffer<float>& getDefaultCabImpulse() const { return cabinet.getDefaultImpulse(); }
+    void readTunerBuffer(float* dest, int numSamples) const;
+
     // Meter values for the editor (updated every block)
     float getInputLevel() const { return meterInput.load(); }
     float getOutputLevel() const { return meterOutput.load(); }
@@ -143,6 +148,10 @@ private:
     std::atomic<float> meterInput{0.0f};
     std::atomic<float> meterOutput{0.0f};
     std::atomic<bool> meterGateOpen{true};
+
+    // Single-writer ring buffer feeding the editor's tuner
+    std::vector<float> tunerRing = std::vector<float>(8192, 0.0f);
+    std::atomic<int> tunerWritePos{0};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(HecateAudioProcessor)
 };

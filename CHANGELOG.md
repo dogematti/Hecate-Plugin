@@ -15,6 +15,12 @@
 - Doubler now works on mono buses (single ghost-take thickening)
 
 ### Added
+- **Tuner**: chromatic tuner on the raw input (TUNER button in the header) —
+  note, cents needle, frequency readout
+- **Cabinet response display**: the CAB tab plots the frequency response of
+  both IR slots (built-in cab included) with live low/high-cut markers
+- **EQ curve overlay**: dragging any EQ or power-section knob shows the
+  combined post-drive tone curve over the artwork
 - Undo/redo (Cmd+Z / Shift+Cmd+Z in the plugin window)
 - Mono-in → stereo-out bus support (the typical guitar-track setup)
 - MIDI program changes switch presets

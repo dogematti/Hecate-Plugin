@@ -237,6 +237,8 @@ void CabinetSimulator::loadDefaultCabinet()
 
     ir.copyFrom(1, 0, ir, 0, 0, length);
 
+    defaultIrCopy.makeCopyOf(ir);
+
     convolutionA.loadImpulseResponse(std::move(ir), sampleRate,
                                      juce::dsp::Convolution::Stereo::yes,
                                      juce::dsp::Convolution::Trim::no,

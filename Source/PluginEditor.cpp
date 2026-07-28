@@ -3,6 +3,8 @@
 #include "Presets.h"
 #include "BinaryData.h"
 
+#include <juce_audio_formats/juce_audio_formats.h>
+
 namespace
 {
     // Canvas matches the artwork's aspect ratio exactly (1619x971), so the
@@ -113,7 +115,18 @@ namespace
         {"CABINET B", 470, 280, 306, kCabPage},
         {"BLEND",     790, 200, 306, kCabPage},
         {"IR TRIM",   790, 200, 444, kCabPage},
+        {"RESPONSE",   30, 730, 444, kCabPage},
     };
+
+    const juce::Rectangle<int> kTunerArea{370, 82, 280, 180};
+    const juce::Rectangle<int> kEqCurveArea{310, 82, 400, 180};
+    const juce::Rectangle<int> kIRCurveArea{30, 458, 730, 132};
+
+    // Shared log-frequency x mapping for the curve displays (40 Hz .. 12 kHz)
+    float frequencyToX(float freq, juce::Rectangle<float> area)
+    {
+        return area.getX() + area.getWidth() * std::log(freq / 40.0f) / std::log(300.0f);
+    }
 
     const juce::Rectangle<int> kMetersArea{580, 4, 164, 36};
     constexpr int kFactoryPresetIdOffset = 1;
@@ -329,6 +342,23 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     positionBox.setTextWhenNoChoicesAvailable("-");
     positionBox.onChange = [this] { positionChanged(); };
 
+    addAndMakeVisible(tunerButton);
+    tunerButton.setClickingTogglesState(true);
+    tunerButton.setTooltip("Chromatic tuner on the raw input. Mute your DAW track while tuning.");
+    tunerButton.onClick = [this] { repaint(); };
+
+    // While an EQ or power-section knob is dragged, show the response curve
+    for (size_t i = 0; i < std::size(kKnobDefs); ++i)
+    {
+        const juce::String id(kKnobDefs[i].id);
+        if (id == param::bass || id == param::mid || id == param::midFreq
+            || id == param::treble || id == param::presence || id == param::depth)
+        {
+            knobs[i]->slider.onDragStart = [this] { ++eqDragCount; repaint(); };
+            knobs[i]->slider.onDragEnd = [this] { --eqDragCount; repaint(); };
+        }
+    }
+
     abButton.setTooltip("Compare two settings: edits go to the shown slot, click to switch.");
     boostButton.setTooltip("Screamer-style boost: pre-clip low cut plus a 750 Hz push. The metal recipe.");
     gateButton.setTooltip("Noise gate on/off.");
@@ -486,6 +516,97 @@ void HecateAudioProcessorEditor::Content::updateIRLabels()
             labels[slot]->setColour(juce::Label::textColourId, HecateLookAndFeel::textDim);
         }
     }
+
+    rebuildIRCurves();
+}
+
+namespace
+{
+    // Magnitude response of an impulse as a drawable path over the shared
+    // log-frequency axis, normalised so its peak sits at the top of the area
+    juce::Path buildResponsePath(const float* samples, int numSamples,
+                                 double sampleRate, juce::Rectangle<float> area)
+    {
+        constexpr int fftOrder = 14;
+        constexpr int fftSize = 1 << fftOrder;
+
+        std::vector<float> data((size_t)fftSize * 2, 0.0f);
+        std::copy(samples, samples + juce::jmin(numSamples, fftSize), data.begin());
+
+        juce::dsp::FFT fft(fftOrder);
+        fft.performFrequencyOnlyForwardTransform(data.data());
+
+        constexpr int points = 220;
+        constexpr float rangeDb = 36.0f;
+        std::array<float, points> db{};
+        float maxDb = -200.0f;
+
+        for (int p = 0; p < points; ++p)
+        {
+            const float freq = 40.0f * std::pow(300.0f, (float)p / (points - 1));
+            const int bin = juce::jlimit(1, fftSize / 2 - 1,
+                                         (int)std::round(freq / sampleRate * fftSize));
+            db[(size_t)p] = juce::Decibels::gainToDecibels(data[(size_t)bin], -100.0f);
+            maxDb = juce::jmax(maxDb, db[(size_t)p]);
+        }
+
+        juce::Path path;
+        for (int p = 0; p < points; ++p)
+        {
+            const float freq = 40.0f * std::pow(300.0f, (float)p / (points - 1));
+            const float normalised = juce::jlimit(0.0f, 1.0f, (maxDb - db[(size_t)p]) / rangeDb);
+            const juce::Point<float> point(frequencyToX(freq, area),
+                                           area.getY() + 4.0f + normalised * (area.getHeight() - 8.0f));
+            if (p == 0)
+                path.startNewSubPath(point);
+            else
+                path.lineTo(point);
+        }
+        return path;
+    }
+}
+
+void HecateAudioProcessorEditor::Content::rebuildIRCurves()
+{
+    irCurveA.clear();
+    irCurveB.clear();
+
+    const auto area = kIRCurveArea.toFloat();
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+
+    auto pathForFile = [&](const juce::String& propertyName) -> juce::Path
+    {
+        const auto irPath = processor.apvts.state.getProperty(propertyName).toString();
+        if (irPath.isEmpty())
+            return {};
+        std::unique_ptr<juce::AudioFormatReader> reader(
+            formats.createReaderFor(juce::File(irPath)));
+        if (reader == nullptr)
+            return {};
+
+        const int numSamples = (int)juce::jmin<juce::int64>(reader->lengthInSamples, 1 << 14);
+        juce::AudioBuffer<float> ir(1, numSamples);
+        reader->read(&ir, 0, numSamples, 0, true, false);
+        return buildResponsePath(ir.getReadPointer(0), numSamples, reader->sampleRate, area);
+    };
+
+    if (processor.isUserImpulseResponseLoaded(0))
+    {
+        irCurveA = pathForFile("irPath");
+    }
+    else
+    {
+        const auto& builtIn = processor.getDefaultCabImpulse();
+        if (builtIn.getNumSamples() > 0)
+            irCurveA = buildResponsePath(builtIn.getReadPointer(0), builtIn.getNumSamples(),
+                                         processor.getSampleRate() > 0.0
+                                             ? processor.getSampleRate() : 44100.0,
+                                         area);
+    }
+
+    if (processor.isUserImpulseResponseLoaded(1))
+        irCurveB = pathForFile("irPath2");
 }
 
 void HecateAudioProcessorEditor::Content::refreshIRBrowser()
@@ -578,6 +699,183 @@ void HecateAudioProcessorEditor::Content::positionChanged()
     updateIRLabels();
 }
 
+// YIN-style pitch detection on the raw input tap
+void HecateAudioProcessorEditor::Content::updateTuner()
+{
+    processor.readTunerBuffer(tunerSamples.data(), (int)tunerSamples.size());
+
+    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
+    constexpr int window = 2048;
+    const float* x = tunerSamples.data();
+
+    float rms = 0.0f;
+    for (int i = 0; i < window; ++i)
+        rms += x[i] * x[i];
+    rms = std::sqrt(rms / window);
+
+    if (rms < 0.003f)
+    {
+        tunerHasPitch = false;
+        return;
+    }
+
+    const int minLag = juce::jmax(2, (int)(sampleRate / 500.0));   // up to 500 Hz
+    const int maxLag = juce::jmin((int)tunerSamples.size() - window - 1,
+                                  (int)(sampleRate / 45.0));       // down to 45 Hz
+
+    // Cumulative-mean-normalised difference; first dip under threshold wins
+    float cumulative = 0.0f;
+    int bestLag = -1;
+    float bestValue = 1.0e9f;
+
+    for (int lag = minLag; lag <= maxLag; ++lag)
+    {
+        float difference = 0.0f;
+        for (int i = 0; i < window; ++i)
+        {
+            const float d = x[i] - x[i + lag];
+            difference += d * d;
+        }
+
+        cumulative += difference;
+        const float normalised = difference * (float)(lag - minLag + 1) / juce::jmax(1.0e-12f, cumulative);
+
+        if (normalised < bestValue)
+        {
+            bestValue = normalised;
+            bestLag = lag;
+        }
+        if (normalised < 0.1f)
+        {
+            bestLag = lag;
+            break;
+        }
+    }
+
+    if (bestLag <= 0)
+    {
+        tunerHasPitch = false;
+        return;
+    }
+
+    const float frequency = (float)(sampleRate / bestLag);
+    const float midi = 69.0f + 12.0f * std::log2(frequency / 440.0f);
+    const int nearest = juce::roundToInt(midi);
+
+    static const char* noteNames[] = {"C", "C#", "D", "D#", "E", "F",
+                                      "F#", "G", "G#", "A", "A#", "B"};
+    tunerNote = juce::String(noteNames[((nearest % 12) + 12) % 12]) + juce::String(nearest / 12 - 1);
+    tunerCents = (midi - (float)nearest) * 100.0f;
+    tunerFrequency = frequency;
+    tunerHasPitch = true;
+}
+
+void HecateAudioProcessorEditor::Content::drawTuner(juce::Graphics& g)
+{
+    const auto area = kTunerArea.toFloat();
+    g.setColour(HecateLookAndFeel::surface.withAlpha(0.92f));
+    g.fillRoundedRectangle(area, 10.0f);
+    g.setColour(HecateLookAndFeel::accent.withAlpha(0.4f));
+    g.drawRoundedRectangle(area.reduced(0.5f), 10.0f, 1.0f);
+
+    if (!tunerHasPitch)
+    {
+        g.setColour(HecateLookAndFeel::textDim);
+        g.setFont(juce::Font(juce::FontOptions(40.0f, juce::Font::bold)));
+        g.drawText("-", kTunerArea, juce::Justification::centred, false);
+        return;
+    }
+
+    const bool inTune = std::abs(tunerCents) < 5.0f;
+    g.setColour(inTune ? juce::Colour(0xff6fae6a) : HecateLookAndFeel::textBright);
+    g.setFont(juce::Font(juce::FontOptions(56.0f, juce::Font::bold)));
+    g.drawText(tunerNote, kTunerArea.withTrimmedBottom(70), juce::Justification::centred, false);
+
+    g.setColour(HecateLookAndFeel::textDim);
+    g.setFont(juce::Font(juce::FontOptions(12.0f)));
+    g.drawText(juce::String(tunerFrequency, 1) + " Hz",
+               kTunerArea.withTrimmedTop(96).withHeight(16), juce::Justification::centred, false);
+
+    // Cents bar: -50..+50, needle green in the +/-5 window
+    const juce::Rectangle<float> bar(area.getX() + 30.0f, area.getBottom() - 42.0f,
+                                     area.getWidth() - 60.0f, 8.0f);
+    g.setColour(juce::Colour(0xff17141c));
+    g.fillRoundedRectangle(bar, 4.0f);
+    g.setColour(HecateLookAndFeel::accentDim.withAlpha(0.6f));
+    g.fillRect(bar.getCentreX() - 0.5f, bar.getY() - 4.0f, 1.0f, bar.getHeight() + 8.0f);
+
+    const float position = bar.getCentreX()
+                           + juce::jlimit(-1.0f, 1.0f, tunerCents / 50.0f) * (bar.getWidth() * 0.5f);
+    g.setColour(inTune ? juce::Colour(0xff6fae6a) : juce::Colour(0xffc85450));
+    g.fillRoundedRectangle(position - 2.0f, bar.getY() - 5.0f, 4.0f, bar.getHeight() + 10.0f, 2.0f);
+
+    g.setColour(HecateLookAndFeel::textDim);
+    g.setFont(juce::Font(juce::FontOptions(10.0f)));
+    g.drawText(juce::String(tunerCents > 0 ? "+" : "") + juce::String(tunerCents, 1) + " ct",
+               (int)bar.getX(), (int)bar.getBottom() + 6, (int)bar.getWidth(), 12,
+               juce::Justification::centred, false);
+}
+
+// Combined post-drive tone curve: EQ bands plus the power amp's presence
+// and depth, drawn while any of those knobs is being dragged
+void HecateAudioProcessorEditor::Content::drawEqCurve(juce::Graphics& g)
+{
+    const auto area = kEqCurveArea.toFloat();
+    g.setColour(HecateLookAndFeel::surface.withAlpha(0.9f));
+    g.fillRoundedRectangle(area, 10.0f);
+    g.setColour(HecateLookAndFeel::accent.withAlpha(0.4f));
+    g.drawRoundedRectangle(area.reduced(0.5f), 10.0f, 1.0f);
+
+    const double sampleRate = processor.getSampleRate() > 0.0 ? processor.getSampleRate() : 44100.0;
+    auto raw = [this](const char* id) { return processor.apvts.getRawParameterValue(id)->load(); };
+
+    using Coefficients = juce::dsp::IIR::Coefficients<float>;
+    const Coefficients::Ptr stages[] = {
+        Coefficients::makeLowShelf(sampleRate, 100.0f, 0.707f,
+                                   juce::Decibels::decibelsToGain(raw(param::bass))),
+        Coefficients::makePeakFilter(sampleRate, juce::jlimit(100.0f, 4000.0f, raw(param::midFreq)),
+                                     1.0f, juce::Decibels::decibelsToGain(raw(param::mid))),
+        Coefficients::makeHighShelf(sampleRate, 8000.0f, 0.707f,
+                                    juce::Decibels::decibelsToGain(raw(param::treble))),
+        Coefficients::makeHighShelf(sampleRate, 3500.0f, 0.8f,
+                                    juce::Decibels::decibelsToGain(raw(param::presence))),
+        Coefficients::makePeakFilter(sampleRate, 100.0f, 0.8f,
+                                     juce::Decibels::decibelsToGain(raw(param::depth))),
+    };
+
+    const auto plot = area.reduced(14.0f, 16.0f);
+
+    // 0 dB line and octave grid
+    g.setColour(juce::Colours::white.withAlpha(0.08f));
+    g.fillRect(plot.getX(), plot.getCentreY(), plot.getWidth(), 1.0f);
+    for (float freq : {100.0f, 1000.0f, 10000.0f})
+        g.fillRect(frequencyToX(freq, plot), plot.getY(), 1.0f, plot.getHeight());
+
+    juce::Path curve;
+    constexpr int points = 160;
+    constexpr float rangeDb = 15.0f;
+
+    for (int p = 0; p < points; ++p)
+    {
+        const float freq = 40.0f * std::pow(300.0f, (float)p / (points - 1));
+        double magnitude = 1.0;
+        for (const auto& stage : stages)
+            magnitude *= stage->getMagnitudeForFrequency(freq, sampleRate);
+
+        const float db = juce::jlimit(-rangeDb, rangeDb,
+                                      (float)juce::Decibels::gainToDecibels(magnitude));
+        const juce::Point<float> point(frequencyToX(freq, plot),
+                                       plot.getCentreY() - db / rangeDb * plot.getHeight() * 0.5f);
+        if (p == 0)
+            curve.startNewSubPath(point);
+        else
+            curve.lineTo(point);
+    }
+
+    g.setColour(HecateLookAndFeel::accent);
+    g.strokePath(curve, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved));
+}
+
 void HecateAudioProcessorEditor::Content::updateDelayTimeEnablement()
 {
     const bool freeMode = syncBox.getSelectedItemIndex() <= 0;
@@ -638,9 +936,61 @@ void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
         g.setFont(juce::Font(juce::FontOptions(11.0f)).withExtraKerningFactor(0.12f));
         g.drawText("MIC", 30, 398, 180, 12, juce::Justification::centredLeft, false);
         g.drawText("POSITION", 230, 398, 200, 12, juce::Justification::centredLeft, false);
+
+        // Cabinet response display
+        const auto plot = kIRCurveArea.toFloat();
+        g.setColour(HecateLookAndFeel::surface.withAlpha(0.75f));
+        g.fillRoundedRectangle(plot, 6.0f);
+
+        g.setColour(juce::Colours::white.withAlpha(0.07f));
+        g.setFont(juce::Font(juce::FontOptions(9.0f)));
+        for (float freq : {100.0f, 1000.0f, 10000.0f})
+        {
+            const float x = frequencyToX(freq, plot);
+            g.fillRect(x, plot.getY(), 1.0f, plot.getHeight());
+            g.setColour(HecateLookAndFeel::textDim.withAlpha(0.7f));
+            g.drawText(freq >= 1000.0f ? juce::String(freq / 1000.0f, 0) + "k" : juce::String((int)freq),
+                       (int)x + 3, (int)plot.getBottom() - 13, 30, 11,
+                       juce::Justification::centredLeft, false);
+            g.setColour(juce::Colours::white.withAlpha(0.07f));
+        }
+
+        if (!irCurveB.isEmpty())
+        {
+            g.setColour(HecateLookAndFeel::textBright.withAlpha(0.65f));
+            g.strokePath(irCurveB, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved));
+        }
+        g.setColour(HecateLookAndFeel::accent);
+        g.strokePath(irCurveA, juce::PathStrokeType(1.8f, juce::PathStrokeType::curved));
+
+        // Trim filter markers
+        const float lowCut = processor.apvts.getRawParameterValue(param::cabLowCut)->load();
+        const float highCut = processor.apvts.getRawParameterValue(param::cabHighCut)->load();
+        g.setColour(juce::Colour(0xffc85450).withAlpha(0.75f));
+        if (lowCut > 21.0f && lowCut >= 40.0f)
+            g.fillRect(frequencyToX(lowCut, plot), plot.getY(), 1.5f, plot.getHeight());
+        if (highCut < 19999.0f && highCut <= 12000.0f)
+            g.fillRect(frequencyToX(highCut, plot), plot.getY(), 1.5f, plot.getHeight());
+
+        g.setFont(juce::Font(juce::FontOptions(10.0f, juce::Font::bold)));
+        g.setColour(HecateLookAndFeel::accent);
+        g.drawText("A", (int)plot.getRight() - 34, (int)plot.getY() + 6, 12, 12,
+                   juce::Justification::centred, false);
+        if (!irCurveB.isEmpty())
+        {
+            g.setColour(HecateLookAndFeel::textBright.withAlpha(0.8f));
+            g.drawText("B", (int)plot.getRight() - 18, (int)plot.getY() + 6, 12, 12,
+                       juce::Justification::centred, false);
+        }
     }
 
     drawMeters(g);
+
+    // Overlays over the artwork area
+    if (tunerButton.getToggleState())
+        drawTuner(g);
+    else if (eqDragCount > 0 && currentPage == kAmpPage)
+        drawEqCurve(g);
 }
 
 // Slim meters built into the header, visible on every tab
@@ -700,6 +1050,7 @@ void HecateAudioProcessorEditor::Content::resized()
     nextPresetButton.setBounds(388, 10, 22, 24);
     savePresetButton.setBounds(416, 10, 44, 24);
     abButton.setBounds(466, 10, 56, 24);
+    tunerButton.setBounds(526, 10, 52, 24);
 
     ampTabButton.setBounds(796, 8, 68, 28);
     fxTabButton.setBounds(868, 8, 68, 28);
@@ -758,6 +1109,20 @@ void HecateAudioProcessorEditor::timerCallback()
 {
     content.repaint(kMetersArea);
     content.updateHeaderState();
+
+    if (content.tunerButton.getToggleState())
+    {
+        content.updateTuner();
+        content.repaint(kTunerArea);
+    }
+    else if (content.eqDragCount > 0)
+    {
+        content.repaint(kEqCurveArea);
+    }
+
+    // Trim markers on the response plot track their knobs live
+    if (content.currentPage == 2)
+        content.repaint(kIRCurveArea);
 }
 
 bool HecateAudioProcessorEditor::keyPressed(const juce::KeyPress& key)

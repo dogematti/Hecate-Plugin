@@ -23,7 +23,11 @@ public:
     bool isUserLoaded(int slot) const;
     juce::String getName(int slot) const;   // slot 1 returns empty string when empty
 
+    // Copy of the synthesised built-in IR, for the editor's response display
+    const juce::AudioBuffer<float>& getDefaultImpulse() const { return defaultIrCopy; }
+
 private:
+    juce::AudioBuffer<float> defaultIrCopy;
     void loadDefaultCabinet();
     void updateTrimFilters(float lowCutHz, float highCutHz);
 
