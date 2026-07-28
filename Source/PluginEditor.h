@@ -42,6 +42,7 @@ private:
         void loadUserPreset(const juce::File& file);
         void updateDelayTimeEnablement();
         void drawMeters(juce::Graphics& g);
+        void setPage(int newPage);
 
         // Mic-placement browser: when the loaded IR sits in a pack laid out
         // as <pack>/<mic>/<position>.wav, the combos let you step through it
@@ -64,6 +65,9 @@ private:
         juce::ComboBox presetBox;
         juce::TextButton savePresetButton{"Save"};
         juce::Array<juce::File> userPresetFiles;
+
+        juce::TextButton ampTabButton{"AMP"}, fxTabButton{"FX"}, cabTabButton{"CAB"};
+        int currentPage = 0;
 
         juce::TextButton loadIRButton{"Load IR..."}, clearIRButton{"Clear"};
         juce::Label irNameLabel;

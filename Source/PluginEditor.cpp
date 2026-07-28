@@ -5,62 +5,96 @@
 
 namespace
 {
-    constexpr int kCanvasW = 1020, kCanvasH = 672;
+    constexpr int kCanvasW = 1020, kCanvasH = 470;
     constexpr int kKnobW = 80, kKnobH = 140;
-    constexpr int kRow1Y = 100, kRow2Y = 304, kRow3Y = 508;
+    constexpr int kRow1Y = 100, kRow2Y = 304;
+    constexpr int kAmpPage = 0, kFxPage = 1, kCabPage = 2;
 
-    struct KnobDef { const char* id; const char* caption; int x; int y; };
+    struct KnobDef { const char* id; const char* caption; int x; int y; int page; };
 
     constexpr KnobDef kKnobDefs[] = {
-        {param::octaveDirect,   "Direct",    18, kRow1Y},
-        {param::octaveLevel,    "Octave",   104, kRow1Y},
-        {param::gateThreshold,  "Gate",     190, kRow1Y},
-        {param::gain,           "Gain",     296, kRow1Y},
-        {param::tight,          "Tight",    382, kRow1Y},
-        {param::tone,           "Tone",     468, kRow1Y},
-        {param::bass,           "Bass",     574, kRow1Y},
-        {param::mid,            "Mid",      660, kRow1Y},
-        {param::treble,         "Treble",   746, kRow1Y},
-        {param::presence,       "Presence", 832, kRow1Y},
-        {param::outputGain,     "Output",   926, kRow1Y},
+        // AMP page
+        {param::octaveDirect,   "Direct",     18, kRow1Y, kAmpPage},
+        {param::octaveLevel,    "Octave",    104, kRow1Y, kAmpPage},
+        {param::gateThreshold,  "Gate",      190, kRow1Y, kAmpPage},
+        {param::gain,           "Gain",      296, kRow1Y, kAmpPage},
+        {param::tight,          "Tight",     382, kRow1Y, kAmpPage},
+        {param::tone,           "Tone",      468, kRow1Y, kAmpPage},
+        {param::bass,           "Bass",      574, kRow1Y, kAmpPage},
+        {param::mid,            "Mid",       660, kRow1Y, kAmpPage},
+        {param::treble,         "Treble",    746, kRow1Y, kAmpPage},
+        {param::presence,       "Presence",  832, kRow1Y, kAmpPage},
+        {param::outputGain,     "Output",    926, kRow1Y, kAmpPage},
+        {param::compThreshold,  "Threshold",  18, kRow2Y, kAmpPage},
+        {param::compRatio,      "Ratio",     104, kRow2Y, kAmpPage},
 
-        {param::chorusRate,     "Rate",      18, kRow2Y},
-        {param::chorusDepth,    "Depth",    104, kRow2Y},
-        {param::chorusMix,      "Mix",      190, kRow2Y},
-        {param::delayTime,      "Time",     296, kRow2Y},
-        {param::delayFeedback,  "Feedback", 382, kRow2Y},
-        {param::delayMix,       "Mix",      468, kRow2Y},
-        {param::compThreshold,  "Threshold", 574, kRow2Y},
-        {param::compRatio,      "Ratio",    660, kRow2Y},
-
-        {param::reverbRoom,     "Room",      18, kRow3Y},
-        {param::reverbWidth,    "Width",    104, kRow3Y},
-        {param::reverbDamp,     "Damping",  190, kRow3Y},
-        {param::reverbPreDelay, "Pre-Delay", 276, kRow3Y},
-        {param::reverbWet,      "Wet",      362, kRow3Y},
-        {param::reverbDry,      "Dry",      448, kRow3Y},
+        // FX page
+        {param::chorusRate,     "Rate",       18, kRow1Y, kFxPage},
+        {param::chorusDepth,    "Depth",     104, kRow1Y, kFxPage},
+        {param::chorusMix,      "Mix",       190, kRow1Y, kFxPage},
+        {param::delayTime,      "Time",      296, kRow1Y, kFxPage},
+        {param::delayFeedback,  "Feedback",  382, kRow1Y, kFxPage},
+        {param::delayMix,       "Mix",       468, kRow1Y, kFxPage},
+        {param::reverbRoom,     "Room",       18, kRow2Y, kFxPage},
+        {param::reverbWidth,    "Width",     104, kRow2Y, kFxPage},
+        {param::reverbDamp,     "Damping",   190, kRow2Y, kFxPage},
+        {param::reverbPreDelay, "Pre-Delay", 276, kRow2Y, kFxPage},
+        {param::reverbWet,      "Wet",       362, kRow2Y, kFxPage},
+        {param::reverbDry,      "Dry",       448, kRow2Y, kFxPage},
     };
 
-    constexpr int kDelayTimeKnobIndex = 14;
+    constexpr int kDelayTimeKnobIndex = 16;
 
-    struct PanelDef { int x; int y; int w; int h; const char* title; };
+    struct PanelDef { int x; int y; int w; int h; const char* title; int page; };
 
     constexpr PanelDef kPanels[] = {
-        { 10,  56, 268, 192, "INPUT"},
-        {288,  56, 268, 192, "AMP"},
-        {566,  56, 346, 192, "EQ"},
-        {922,  56,  88, 192, "OUTPUT"},
-        { 10, 260, 268, 192, "CHORUS"},
-        {288, 260, 268, 192, "DELAY"},
-        {566, 260, 180, 192, "COMPRESSOR"},
-        {756, 260, 254, 192, "METERS"},
-        { 10, 464, 532, 192, "REVERB"},
-        {552, 464, 458, 192, "CABINET IR"},
+        { 10,  56, 268, 192, "INPUT",      kAmpPage},
+        {288,  56, 268, 192, "AMP",        kAmpPage},
+        {566,  56, 346, 192, "EQ",         kAmpPage},
+        {922,  56,  88, 192, "OUTPUT",     kAmpPage},
+        { 10, 260, 268, 192, "COMPRESSOR", kAmpPage},
+        {288, 260, 722, 192, "METERS",     kAmpPage},
+
+        { 10,  56, 268, 192, "CHORUS",     kFxPage},
+        {288,  56, 268, 192, "DELAY",      kFxPage},
+        { 10, 260, 532, 192, "REVERB",     kFxPage},
+
+        { 10,  56, 1000, 396, "CABINET IR", kCabPage},
     };
 
-    const juce::Rectangle<int> kMetersArea{756, 260, 254, 192};
+    const juce::Rectangle<int> kMetersArea{288, 260, 722, 192};
     constexpr int kFactoryPresetIdOffset = 1;
     constexpr int kUserPresetIdOffset = 1000;
+
+    // Strips the shared filename prefix within a folder ("OD-E112-DEMON-DYN-57-")
+    // so the position combo shows just the varying part ("P10-50")
+    juce::String commonNamePrefix(const juce::Array<juce::File>& files)
+    {
+        if (files.size() < 2)
+            return {};
+
+        juce::String prefix = files[0].getFileNameWithoutExtension();
+        for (const auto& file : files)
+        {
+            const auto name = file.getFileNameWithoutExtension();
+            int len = 0;
+            const int limit = juce::jmin(prefix.length(), name.length());
+            while (len < limit && prefix[len] == name[len])
+                ++len;
+            prefix = prefix.substring(0, len);
+        }
+
+        // Cut back to the last separator so we never split mid-token
+        const int lastDash = juce::jmax(prefix.lastIndexOfChar('-'), prefix.lastIndexOfChar('_'));
+        return lastDash >= 0 ? prefix.substring(0, lastDash + 1) : juce::String();
+    }
+
+    juce::Array<juce::File> wavFilesIn(const juce::File& dir)
+    {
+        auto files = dir.findChildFiles(juce::File::findFiles, false, "*.wav;*.aif;*.aiff;*.flac");
+        files.sort();
+        return files;
+    }
 }
 
 HecateAudioProcessorEditor::Content::Knob::Knob(juce::AudioProcessorValueTreeState& apvts,
@@ -140,6 +174,13 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
             });
     };
 
+    addAndMakeVisible(ampTabButton);
+    ampTabButton.onClick = [this] { setPage(kAmpPage); };
+    addAndMakeVisible(fxTabButton);
+    fxTabButton.onClick = [this] { setPage(kFxPage); };
+    addAndMakeVisible(cabTabButton);
+    cabTabButton.onClick = [this] { setPage(kCabPage); };
+
     addAndMakeVisible(loadIRButton);
     loadIRButton.onClick = [this]
     {
@@ -179,40 +220,69 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     positionBox.onChange = [this] { positionChanged(); };
 
     refreshIRBrowser();
+    setPage(kAmpPage);
 
     setSize(kCanvasW, kCanvasH);
 }
 
-namespace
+void HecateAudioProcessorEditor::Content::setPage(int newPage)
 {
-    // Strips the shared filename prefix within a folder ("OD-E112-DEMON-DYN-57-")
-    // so the position combo shows just the varying part ("P10-50")
-    juce::String commonNamePrefix(const juce::Array<juce::File>& files)
+    currentPage = newPage;
+
+    for (size_t i = 0; i < knobs.size(); ++i)
     {
-        if (files.size() < 2)
-            return {};
-
-        juce::String prefix = files[0].getFileNameWithoutExtension();
-        for (const auto& file : files)
-        {
-            const auto name = file.getFileNameWithoutExtension();
-            int len = 0;
-            const int limit = juce::jmin(prefix.length(), name.length());
-            while (len < limit && prefix[len] == name[len])
-                ++len;
-            prefix = prefix.substring(0, len);
-        }
-
-        // Cut back to the last separator so we never split mid-token
-        const int lastDash = juce::jmax(prefix.lastIndexOfChar('-'), prefix.lastIndexOfChar('_'));
-        return lastDash >= 0 ? prefix.substring(0, lastDash + 1) : juce::String();
+        const bool visible = kKnobDefs[i].page == currentPage;
+        knobs[i]->slider.setVisible(visible);
+        knobs[i]->label.setVisible(visible);
     }
 
-    juce::Array<juce::File> wavFilesIn(const juce::File& dir)
+    for (auto* component : std::initializer_list<juce::Component*>{
+             &gateButton, &boostButton, &compButton})
+        component->setVisible(currentPage == kAmpPage);
+    syncBox.setVisible(currentPage == kFxPage);
+    for (auto* component : std::initializer_list<juce::Component*>{
+             &loadIRButton, &clearIRButton, &micBox, &positionBox, &irNameLabel})
+        component->setVisible(currentPage == kCabPage);
+
+    ampTabButton.setToggleState(currentPage == kAmpPage, juce::dontSendNotification);
+    fxTabButton.setToggleState(currentPage == kFxPage, juce::dontSendNotification);
+    cabTabButton.setToggleState(currentPage == kCabPage, juce::dontSendNotification);
+
+    repaint();
+}
+
+void HecateAudioProcessorEditor::Content::refreshPresetBox()
+{
+    presetBox.clear(juce::dontSendNotification);
+
+    const auto& factory = getFactoryPresets();
+    for (int i = 0; i < (int)factory.size(); ++i)
+        presetBox.addItem(factory[(size_t)i].name, kFactoryPresetIdOffset + i);
+
+    userPresetFiles = getUserPresetDirectory().findChildFiles(juce::File::findFiles, false, "*.xml");
+    if (!userPresetFiles.isEmpty())
     {
-        auto files = dir.findChildFiles(juce::File::findFiles, false, "*.wav;*.aif;*.aiff;*.flac");
-        files.sort();
-        return files;
+        presetBox.addSeparator();
+        for (int i = 0; i < userPresetFiles.size(); ++i)
+            presetBox.addItem(userPresetFiles[i].getFileNameWithoutExtension(),
+                              kUserPresetIdOffset + i);
+    }
+}
+
+void HecateAudioProcessorEditor::Content::loadUserPreset(const juce::File& file)
+{
+    if (auto xml = juce::XmlDocument::parse(file))
+    {
+        processor.apvts.replaceState(juce::ValueTree::fromXml(*xml));
+
+        const auto irPath = processor.apvts.state.getProperty("irPath").toString();
+        if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile())
+            processor.loadImpulseResponse(juce::File(irPath));
+        else
+            processor.clearImpulseResponse();
+
+        irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
+        refreshIRBrowser();
     }
 }
 
@@ -306,41 +376,6 @@ void HecateAudioProcessorEditor::Content::positionChanged()
     irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
 }
 
-void HecateAudioProcessorEditor::Content::refreshPresetBox()
-{
-    presetBox.clear(juce::dontSendNotification);
-
-    const auto& factory = getFactoryPresets();
-    for (int i = 0; i < (int)factory.size(); ++i)
-        presetBox.addItem(factory[(size_t)i].name, kFactoryPresetIdOffset + i);
-
-    userPresetFiles = getUserPresetDirectory().findChildFiles(juce::File::findFiles, false, "*.xml");
-    if (!userPresetFiles.isEmpty())
-    {
-        presetBox.addSeparator();
-        for (int i = 0; i < userPresetFiles.size(); ++i)
-            presetBox.addItem(userPresetFiles[i].getFileNameWithoutExtension(),
-                              kUserPresetIdOffset + i);
-    }
-}
-
-void HecateAudioProcessorEditor::Content::loadUserPreset(const juce::File& file)
-{
-    if (auto xml = juce::XmlDocument::parse(file))
-    {
-        processor.apvts.replaceState(juce::ValueTree::fromXml(*xml));
-
-        const auto irPath = processor.apvts.state.getProperty("irPath").toString();
-        if (irPath.isNotEmpty() && juce::File(irPath).existsAsFile())
-            processor.loadImpulseResponse(juce::File(irPath));
-        else
-            processor.clearImpulseResponse();
-
-        irNameLabel.setText(processor.getImpulseResponseName(), juce::dontSendNotification);
-        refreshIRBrowser();
-    }
-}
-
 void HecateAudioProcessorEditor::Content::updateDelayTimeEnablement()
 {
     const bool freeMode = syncBox.getSelectedItemIndex() <= 0;
@@ -364,6 +399,9 @@ void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
     // Translucent panels keep the knobs readable while the artwork shows through
     for (const auto& panel : kPanels)
     {
+        if (panel.page != currentPage)
+            continue;
+
         auto r = juce::Rectangle<float>((float)panel.x, (float)panel.y, (float)panel.w, (float)panel.h);
         g.setColour(juce::Colour(0xff0d0b12).withAlpha(0.70f));
         g.fillRoundedRectangle(r, 8.0f);
@@ -375,12 +413,16 @@ void HecateAudioProcessorEditor::Content::paint(juce::Graphics& g)
         g.drawText(panel.title, panel.x, panel.y + 6, panel.w, 16, juce::Justification::centred, false);
     }
 
-    g.setColour(HecateLookAndFeel::textDim);
-    g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("MIC", 572, 542, 190, 12, juce::Justification::centredLeft, false);
-    g.drawText("POSITION", 772, 542, 190, 12, juce::Justification::centredLeft, false);
+    if (currentPage == kAmpPage)
+        drawMeters(g);
 
-    drawMeters(g);
+    if (currentPage == kCabPage)
+    {
+        g.setColour(HecateLookAndFeel::textDim);
+        g.setFont(juce::Font(juce::FontOptions(11.0f)));
+        g.drawText("MIC", 60, 210, 300, 12, juce::Justification::centredLeft, false);
+        g.drawText("POSITION", 400, 210, 300, 12, juce::Justification::centredLeft, false);
+    }
 }
 
 void HecateAudioProcessorEditor::Content::drawMeters(juce::Graphics& g)
@@ -389,7 +431,7 @@ void HecateAudioProcessorEditor::Content::drawMeters(juce::Graphics& g)
 
     // Output peak, -60..0 dB
     {
-        auto area = barArea(800);
+        auto area = barArea(500);
         g.setColour(juce::Colour(0xff17141c));
         g.fillRoundedRectangle(area, 3.0f);
 
@@ -402,7 +444,7 @@ void HecateAudioProcessorEditor::Content::drawMeters(juce::Graphics& g)
 
     // Compressor gain reduction, 0..24 dB from the top
     {
-        auto area = barArea(870);
+        auto area = barArea(610);
         g.setColour(juce::Colour(0xff17141c));
         g.fillRoundedRectangle(area, 3.0f);
 
@@ -416,16 +458,16 @@ void HecateAudioProcessorEditor::Content::drawMeters(juce::Graphics& g)
     {
         const bool open = processor.isGateOpen();
         g.setColour(open ? juce::Colour(0xff6fae6a) : juce::Colour(0xff5a2622));
-        g.fillEllipse(931.0f, 310.0f, 18.0f, 18.0f);
+        g.fillEllipse(724.0f, 310.0f, 18.0f, 18.0f);
         g.setColour(juce::Colours::black.withAlpha(0.4f));
-        g.drawEllipse(931.0f, 310.0f, 18.0f, 18.0f, 1.0f);
+        g.drawEllipse(724.0f, 310.0f, 18.0f, 18.0f, 1.0f);
     }
 
     g.setColour(HecateLookAndFeel::textDim);
     g.setFont(juce::Font(juce::FontOptions(11.0f)));
-    g.drawText("OUT", 790, 434, 46, 14, juce::Justification::centred, false);
-    g.drawText("GR", 860, 434, 46, 14, juce::Justification::centred, false);
-    g.drawText("GATE", 917, 434, 46, 14, juce::Justification::centred, false);
+    g.drawText("OUT", 490, 434, 46, 14, juce::Justification::centred, false);
+    g.drawText("GR", 600, 434, 46, 14, juce::Justification::centred, false);
+    g.drawText("GATE", 710, 434, 46, 14, juce::Justification::centred, false);
 }
 
 void HecateAudioProcessorEditor::Content::resized()
@@ -435,17 +477,20 @@ void HecateAudioProcessorEditor::Content::resized()
 
     presetBox.setBounds(20, 14, 250, 26);
     savePresetButton.setBounds(278, 14, 60, 26);
+    ampTabButton.setBounds(796, 14, 64, 26);
+    fxTabButton.setBounds(866, 14, 64, 26);
+    cabTabButton.setBounds(936, 14, 64, 26);
 
     gateButton.setBounds(214, 60, 54, 20);
     boostButton.setBounds(494, 60, 54, 20);
-    syncBox.setBounds(460, 262, 88, 22);
-    compButton.setBounds(688, 262, 50, 20);
+    compButton.setBounds(214, 264, 54, 20);
+    syncBox.setBounds(460, 58, 88, 22);
 
-    loadIRButton.setBounds(572, 500, 110, 28);
-    clearIRButton.setBounds(692, 500, 70, 28);
-    micBox.setBounds(572, 556, 190, 24);
-    positionBox.setBounds(772, 556, 190, 24);
-    irNameLabel.setBounds(572, 592, 420, 20);
+    loadIRButton.setBounds(60, 120, 140, 32);
+    clearIRButton.setBounds(216, 120, 80, 32);
+    micBox.setBounds(60, 228, 300, 26);
+    positionBox.setBounds(400, 228, 300, 26);
+    irNameLabel.setBounds(60, 290, 600, 22);
 }
 
 HecateAudioProcessorEditor::HecateAudioProcessorEditor(HecateAudioProcessor& p)

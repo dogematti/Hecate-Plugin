@@ -19,6 +19,7 @@ public:
         setColour(juce::TextButton::buttonColourId, juce::Colour(0xff26212b));
         setColour(juce::TextButton::buttonOnColourId, accent);
         setColour(juce::TextButton::textColourOffId, accent);
+        setColour(juce::TextButton::textColourOnId, juce::Colour(0xff17131e));
     }
 
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
