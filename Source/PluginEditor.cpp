@@ -28,7 +28,7 @@ namespace
         {param::gateThreshold,  "Gate",     288, kRow1Y, kKnobSize, kAmpPage,
          "Noise gate threshold. Raise until silence between chugs; the header LED shows gate state."},
         {param::gain,           "Gain",     410, kRow1Y - 10, kHeroSize, kAmpPage,
-         "Preamp drive (+12 to +60 dB). Modern metal uses moderate gain plus Boost, not maximum."},
+         "Preamp drive (+18 to +72 dB). Modern metal uses moderate gain plus Boost, not maximum."},
         {param::tight,          "Tight",    542, kRow1Y, kKnobSize, kAmpPage,
          "Pre-drive low cut (40-300 Hz). Higher = tighter chugs; restore weight with Depth."},
         {param::tone,           "Tone",     628, kRow1Y, kKnobSize, kAmpPage,

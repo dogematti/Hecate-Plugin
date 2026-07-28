@@ -17,7 +17,7 @@
 //        -> DC blocker (5 Hz)
 //   -> recombine bands -> 1st-order tone low-pass (2 kHz..16 kHz)
 //
-// Gain 0..1 sweeps +12..+60 dB of drive, applied as half-gain into each of
+// Gain 0..1 sweeps +18..+72 dB of drive, applied as half-gain into each of
 // the first two stages. The dynamic bias shifts even-harmonic content with
 // playing intensity, the touch-sensitive tube feel.
 class Saturator
@@ -32,8 +32,8 @@ public:
     int getLatencySamples() const;
 
 private:
-    static constexpr float minDriveDb = 12.0f;
-    static constexpr float driveRangeDb = 48.0f;
+    static constexpr float minDriveDb = 18.0f;
+    static constexpr float driveRangeDb = 54.0f;
 
     static constexpr float splitCrossoverHz = 120.0f;
     static constexpr float lowBandDrive = 3.0f;
@@ -49,13 +49,13 @@ private:
 
     static constexpr float interstageHighPassHz = 10.0f;
     static constexpr float interstageLowPassHz = 9500.0f;
-    static constexpr float interstagePadDb = -14.0f;
+    static constexpr float interstagePadDb = -12.0f;
 
     static constexpr float envAttackMs = 0.5f;
     static constexpr float envReleaseMs = 40.0f;
     static constexpr float biasBase = 0.15f;
     static constexpr float biasDepth = 0.35f;
-    static constexpr float stage2Gain = 1.8f;
+    static constexpr float stage2Gain = 2.0f;
 
     static constexpr float stageLowPassHz = 12000.0f;
 

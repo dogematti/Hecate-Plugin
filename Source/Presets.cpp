@@ -10,7 +10,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         {"Default", {}},
 
         {"Modern Rhythm", {
-            {param::gain, 0.6f}, {param::boost, 1.0f}, {param::tight, 120.0f},
+            {param::gain, 0.7f}, {param::boost, 1.0f}, {param::tight, 120.0f},
             {param::clipMode, 1.0f}, {param::tone, 0.55f},
             {param::bass, 3.0f}, {param::mid, -3.0f}, {param::midFreq, 450.0f},
             {param::treble, 2.0f}, {param::presence, 3.5f},
@@ -20,7 +20,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         }},
 
         {"7-String Rhythm", {
-            {param::gain, 0.6f}, {param::boost, 1.0f}, {param::tight, 110.0f},
+            {param::gain, 0.7f}, {param::boost, 1.0f}, {param::tight, 110.0f},
             {param::clipMode, 1.0f}, {param::tone, 0.5f},
             {param::bass, 2.5f}, {param::mid, -4.0f}, {param::midFreq, 450.0f},
             {param::treble, 2.0f}, {param::presence, 3.0f},
@@ -30,7 +30,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         }},
 
         {"7-String Scoop", {
-            {param::gain, 0.65f}, {param::boost, 1.0f}, {param::tight, 140.0f},
+            {param::gain, 0.72f}, {param::boost, 1.0f}, {param::tight, 140.0f},
             {param::clipMode, 1.0f}, {param::tone, 0.55f},
             {param::bass, 3.5f}, {param::mid, -7.0f}, {param::midFreq, 500.0f},
             {param::treble, 2.5f}, {param::presence, 3.0f},
@@ -40,7 +40,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         }},
 
         {"Djent", {
-            {param::gain, 0.5f}, {param::boost, 1.0f}, {param::tight, 160.0f},
+            {param::gain, 0.6f}, {param::boost, 1.0f}, {param::tight, 160.0f},
             {param::clipMode, 1.0f}, {param::tone, 0.6f},
             {param::bass, 2.0f}, {param::mid, -5.0f}, {param::midFreq, 380.0f},
             {param::treble, 3.0f}, {param::presence, 4.0f},
@@ -62,7 +62,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
         }},
 
         {"Solo Lead", {
-            {param::gain, 0.8f}, {param::boost, 1.0f}, {param::tight, 100.0f},
+            {param::gain, 0.85f}, {param::boost, 1.0f}, {param::tight, 100.0f},
             {param::clipMode, 0.0f}, {param::tone, 0.6f},
             {param::mid, 2.0f}, {param::midFreq, 750.0f}, {param::presence, 2.0f},
             {param::sag, 0.3f}, {param::depth, 2.0f},
