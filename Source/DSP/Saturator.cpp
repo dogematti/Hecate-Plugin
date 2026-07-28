@@ -6,6 +6,12 @@ namespace
     {
         return 1.0f - std::exp(-juce::MathConstants<float>::twoPi * cutoffHz / (float)sampleRate);
     }
+
+    // Same formula with fc = 1 / (2*pi*t), i.e. 1 - exp(-1 / (t * rate))
+    float timeConstantCoeff(float timeMs, double sampleRate)
+    {
+        return 1.0f - std::exp(-1.0f / (timeMs * 0.001f * (float)sampleRate));
+    }
 }
 
 void Saturator::prepare(double newSampleRate, int maxBlockSize)
@@ -20,19 +26,33 @@ void Saturator::prepare(double newSampleRate, int maxBlockSize)
     tightFilter.prepare(spec);
     tightFilter.setType(juce::dsp::StateVariableTPTFilterType::highpass);
 
-    boostFilter.prepare(spec);
-    *boostFilter.state = *juce::dsp::IIR::Coefficients<float>::makePeakFilter(
-        sampleRate, 750.0f, 0.7f, juce::Decibels::decibelsToGain(8.0f));
+    // Bright-cap shelves never change: build coefficients once here
+    preEmphasisFilter.prepare(spec);
+    *preEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
+        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(brightShelfDb));
 
-    toneFilter.prepare(spec);
-    toneFilter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
+    deEmphasisFilter.prepare(spec);
+    *deEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
+        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(-brightShelfDb));
 
     oversampler = std::make_unique<juce::dsp::Oversampling<float>>(
-        2, 1, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, false);
+        2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
     oversampler->initProcessing((size_t)maxBlockSize);
 
-    interstageCoeff = onePoleCoeff(30.0f, sampleRate * 2.0);
-    dcCoeff = onePoleCoeff(15.0f, sampleRate);
+    lowBandBuffer.setSize(2, maxBlockSize);
+
+    const double oversampledRate = sampleRate * 4.0;
+
+    splitCoeff = onePoleCoeff(splitCrossoverHz, sampleRate);
+    screamerHpCoeff = onePoleCoeff(screamerHighPassHz, sampleRate);
+    screamerLpCoeff = onePoleCoeff(screamerLowPassHz, sampleRate);
+    dcCoeff = onePoleCoeff(dcBlockerHz, sampleRate);
+
+    interstageHpCoeff = onePoleCoeff(interstageHighPassHz, oversampledRate);
+    interstageLpCoeff = onePoleCoeff(interstageLowPassHz, oversampledRate);
+    stageLpCoeff = onePoleCoeff(stageLowPassHz, oversampledRate);
+    envAttackCoeff = timeConstantCoeff(envAttackMs, oversampledRate);
+    envReleaseCoeff = timeConstantCoeff(envReleaseMs, oversampledRate);
 
     reset();
 }
@@ -40,14 +60,26 @@ void Saturator::prepare(double newSampleRate, int maxBlockSize)
 void Saturator::reset()
 {
     tightFilter.reset();
-    boostFilter.reset();
-    toneFilter.reset();
+    preEmphasisFilter.reset();
+    deEmphasisFilter.reset();
 
     if (oversampler != nullptr)
         oversampler->reset();
 
-    interstageState[0] = interstageState[1] = 0.0f;
-    dcState[0] = dcState[1] = 0.0f;
+    lowBandBuffer.clear();
+
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        splitState[ch] = 0.0f;
+        screamerHpState[ch] = 0.0f;
+        screamerLpState[ch] = 0.0f;
+        dcState[ch] = 0.0f;
+        toneState[ch] = 0.0f;
+        interstageHpState[ch] = 0.0f;
+        interstageLpState[ch] = 0.0f;
+        stageLpState[ch] = 0.0f;
+        envState[ch] = 0.0f;
+    }
 }
 
 int Saturator::getLatencySamples() const
@@ -55,58 +87,128 @@ int Saturator::getLatencySamples() const
     return oversampler != nullptr ? (int)std::ceil(oversampler->getLatencyInSamples()) : 0;
 }
 
-void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tightHz, float tone, bool boost)
+void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tightHz, float tone, bool boost, int clipMode)
 {
     if (oversampler == nullptr)
         return;
 
-    juce::dsp::AudioBlock<float> block(buffer);
+    const int numChannels = juce::jmin(buffer.getNumChannels(), 2);
+    const int numSamples = buffer.getNumSamples();
+
+    juce::dsp::AudioBlock<float> fullBlock(buffer);
+    auto block = fullBlock.getSubsetChannelBlock(0, (size_t)numChannels);
     juce::dsp::ProcessContextReplacing<float> context(block);
 
+    // 1. Tight high-pass
     tightFilter.setCutoffFrequency(juce::jlimit(20.0f, 400.0f, tightHz));
     tightFilter.process(context);
 
-    if (boost)
+    // 2. Split at 120 Hz: low band gets gentle saturation and skips the drive
+    for (int ch = 0; ch < numChannels; ++ch)
     {
-        boostFilter.process(context);
-        block.multiplyBy(juce::Decibels::decibelsToGain(boostLevelDb));
+        auto* samples = buffer.getWritePointer(ch);
+        auto* lowOut = lowBandBuffer.getWritePointer(ch);
+        float state = splitState[ch];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            const float x = samples[i];
+            state += splitCoeff * (x - state);
+            lowOut[i] = std::tanh(state * lowBandDrive) / lowBandDrive * lowBandMakeup;
+            samples[i] = x - state;
+        }
+
+        splitState[ch] = state;
     }
 
-    const float driveGain = juce::Decibels::decibelsToGain(minDriveDb + gain * (maxDriveDb - minDriveDb));
-    const float biasOffset = std::tanh(stage2Bias);
+    // 3. Screamer boost: band-limit the high band and slam the front end
+    if (boost)
+    {
+        const float boostGain = juce::Decibels::decibelsToGain(screamerBoostDb);
+
+        for (int ch = 0; ch < numChannels; ++ch)
+        {
+            auto* samples = buffer.getWritePointer(ch);
+            float hpState = screamerHpState[ch];
+            float lpState = screamerLpState[ch];
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                const float x = samples[i];
+                hpState += screamerHpCoeff * (x - hpState);
+                lpState += screamerLpCoeff * ((x - hpState) - lpState);
+                samples[i] = lpState * boostGain;
+            }
+
+            screamerHpState[ch] = hpState;
+            screamerLpState[ch] = lpState;
+        }
+    }
+
+    // 4. Bright-cap pre-emphasis (undone after the drive at step 7)
+    preEmphasisFilter.process(context);
+
+    // 5. 4x oversampled three-stage clipping cascade
+    const float driveDb = minDriveDb + gain * driveRangeDb;
+    const float half = juce::Decibels::decibelsToGain(driveDb * 0.5f);
+    const float pad = juce::Decibels::decibelsToGain(interstagePadDb);
 
     auto upsampled = oversampler->processSamplesUp(block);
 
     for (size_t ch = 0; ch < upsampled.getNumChannels(); ++ch)
     {
         auto* samples = upsampled.getChannelPointer(ch);
-        float hpState = interstageState[ch];
+        float hpState = interstageHpState[ch];
+        float lpState = interstageLpState[ch];
+        float sLpState = stageLpState[ch];
+        float env = envState[ch];
 
         for (size_t i = 0; i < upsampled.getNumSamples(); ++i)
         {
-            // Stage 1: main gain stage
-            float x = std::tanh(samples[i] * driveGain * 0.5f);
+            // Stage 1: main gain stage (first half of the drive)
+            const float stage1 = std::tanh(samples[i] * half);
 
-            // Interstage high-pass keeps the low end from turning to mud
-            hpState += interstageCoeff * (x - hpState);
-            x -= hpState;
+            // Interstage: kill DC, tame fizz, then pad into stage 2
+            hpState += interstageHpCoeff * (stage1 - hpState);
+            float x = stage1 - hpState;
+            lpState += interstageLpCoeff * (x - lpState);
+            x = lpState * pad;
 
-            // Stage 2: asymmetric (even harmonics, tube-like feel)
-            x = std::tanh(1.8f * x + stage2Bias) - biasOffset;
+            // Dynamic asymmetry: bias rides the stage 1 envelope
+            const float rectified = std::abs(stage1);
+            env += (rectified > env ? envAttackCoeff : envReleaseCoeff) * (rectified - env);
+            const float bias = biasBase + biasDepth * juce::jmin(1.0f, env);
 
-            // Stage 3: final rounding
-            samples[i] = std::tanh(1.3f * x);
+            // Stage 2: second half of the drive, even harmonics from the bias
+            x = std::tanh(stage2Gain * x * half + bias) - std::tanh(bias);
+
+            sLpState += stageLpCoeff * (x - sLpState);
+            x = sLpState;
+
+            // Stage 3: output stage character
+            switch (clipMode)
+            {
+                case 0:  x = std::tanh(tubeStageGain * x); break;
+                case 1:  x = std::tanh(modernStageGain * x); break;
+                default: x = juce::jlimit(-fuzzClipLevel, fuzzClipLevel, x * fuzzStageGain) * fuzzMakeup; break;
+            }
+
+            samples[i] = x;
         }
 
-        interstageState[ch] = hpState;
+        interstageHpState[ch] = hpState;
+        interstageLpState[ch] = lpState;
+        stageLpState[ch] = sLpState;
+        envState[ch] = env;
     }
 
+    // 6. Downsample
     oversampler->processSamplesDown(block);
 
-    // Remove the residual DC offset the asymmetric stage introduces
-    const int numChannels = juce::jmin(buffer.getNumChannels(), 2);
-    const int numSamples = buffer.getNumSamples();
+    // 7. Bright-cap de-emphasis restores the pre-drive tilt
+    deEmphasisFilter.process(context);
 
+    // 8. DC blocker mops up the offset the asymmetric stage introduces
     for (int ch = 0; ch < numChannels; ++ch)
     {
         auto* samples = buffer.getWritePointer(ch);
@@ -114,14 +216,33 @@ void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tigh
 
         for (int i = 0; i < numSamples; ++i)
         {
-            state += dcCoeff * (samples[i] - state);
-            samples[i] -= state;
+            const float x = samples[i];
+            samples[i] = x - state;
+            state += dcCoeff * (x - state);
         }
 
         dcState[ch] = state;
     }
 
-    // Tone: 2nd-order low-pass swept exponentially from dark to bright
-    toneFilter.setCutoffFrequency(toneMinHz * std::pow(toneMaxHz / toneMinHz, tone));
-    toneFilter.process(context);
+    // 9. Recombine: undriven low band restores the chug
+    for (int ch = 0; ch < numChannels; ++ch)
+        buffer.addFrom(ch, 0, lowBandBuffer, ch, 0, numSamples);
+
+    // 10. Tone: 1st-order low-pass swept exponentially 2 kHz..16 kHz
+    const float toneCutoff = toneBaseHz * std::pow(toneRatio, tone);
+    const float toneCoeff = onePoleCoeff(toneCutoff, sampleRate);
+
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        auto* samples = buffer.getWritePointer(ch);
+        float state = toneState[ch];
+
+        for (int i = 0; i < numSamples; ++i)
+        {
+            state += toneCoeff * (samples[i] - state);
+            samples[i] = state;
+        }
+
+        toneState[ch] = state;
+    }
 }

@@ -15,6 +15,9 @@ void Compressor::reset()
 void Compressor::process(juce::AudioBuffer<float>& buffer, float thresholdDb, float ratio)
 {
     const float thresholdLinear = juce::Decibels::decibelsToGain(thresholdDb);
+    // Auto make-up: half the theoretical loudness loss, so engaging the
+    // compressor doesn't just get quieter
+    const float makeup = juce::Decibels::decibelsToGain(-thresholdDb * (1.0f - 1.0f / ratio) * 0.5f);
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
     auto* const* channels = buffer.getArrayOfWritePointers();
@@ -39,7 +42,7 @@ void Compressor::process(juce::AudioBuffer<float>& buffer, float thresholdDb, fl
         minGain = juce::jmin(minGain, gain);
 
         for (int ch = 0; ch < numChannels; ++ch)
-            channels[ch][i] *= gain;
+            channels[ch][i] *= gain * makeup;
     }
 
     gainReductionDb.store(-juce::Decibels::gainToDecibels(minGain));

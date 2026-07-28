@@ -11,7 +11,7 @@ void Equalizer::prepare(double newSampleRate, int maxBlockSize)
     chain.prepare(spec);
 
     // Force a coefficient rebuild on the next process call
-    lastBass = lastMid = lastTreble = lastPresence = 1.0e9f;
+    lastBass = lastMid = lastMidFreq = lastTreble = 1.0e9f;
 }
 
 void Equalizer::reset()
@@ -19,16 +19,16 @@ void Equalizer::reset()
     chain.reset();
 }
 
-void Equalizer::process(juce::AudioBuffer<float>& buffer, float bass, float mid, float treble, float presence)
+void Equalizer::process(juce::AudioBuffer<float>& buffer, float bass, float mid, float midFreqHz, float treble)
 {
-    updateCoefficients(bass, mid, treble, presence);
+    updateCoefficients(bass, mid, midFreqHz, treble);
 
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::ProcessContextReplacing<float> context(block);
     chain.process(context);
 }
 
-void Equalizer::updateCoefficients(float bass, float mid, float treble, float presence)
+void Equalizer::updateCoefficients(float bass, float mid, float midFreqHz, float treble)
 {
     using Coefficients = juce::dsp::IIR::Coefficients<float>;
 
@@ -39,23 +39,18 @@ void Equalizer::updateCoefficients(float bass, float mid, float treble, float pr
         lastBass = bass;
     }
 
-    if (mid != lastMid)
+    if (mid != lastMid || midFreqHz != lastMidFreq)
     {
         *chain.get<1>().state = *Coefficients::makePeakFilter(
-            sampleRate, midHz, 0.707f, juce::Decibels::decibelsToGain(mid));
+            sampleRate, juce::jlimit(100.0f, 4000.0f, midFreqHz), midQ,
+            juce::Decibels::decibelsToGain(mid));
         lastMid = mid;
-    }
-
-    if (presence != lastPresence)
-    {
-        *chain.get<2>().state = *Coefficients::makePeakFilter(
-            sampleRate, presenceHz, 0.8f, juce::Decibels::decibelsToGain(presence));
-        lastPresence = presence;
+        lastMidFreq = midFreqHz;
     }
 
     if (treble != lastTreble)
     {
-        *chain.get<3>().state = *Coefficients::makeHighShelf(
+        *chain.get<2>().state = *Coefficients::makeHighShelf(
             sampleRate, trebleHz, 0.707f, juce::Decibels::decibelsToGain(treble));
         lastTreble = treble;
     }

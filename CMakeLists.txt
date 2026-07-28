@@ -14,9 +14,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(JUCE)
 
 if(APPLE)
-    set(PLUGIN_FORMATS AU VST3)
+    set(PLUGIN_FORMATS AU VST3 Standalone)
 else()
-    set(PLUGIN_FORMATS VST3)
+    set(PLUGIN_FORMATS VST3 Standalone)
 endif()
 
 juce_add_plugin(Hecate
@@ -44,6 +44,9 @@ target_sources(Hecate
         Source/Presets.cpp
         Source/DSP/Octaver.cpp
         Source/DSP/Saturator.cpp
+        Source/DSP/PowerAmp.cpp
+        Source/DSP/GateProcessor.cpp
+        Source/DSP/Doubler.cpp
         Source/DSP/StereoDelay.cpp
         Source/DSP/Equalizer.cpp
         Source/DSP/Compressor.cpp
@@ -59,7 +62,9 @@ target_link_libraries(Hecate
     PRIVATE
         HecateAssets
         juce::juce_audio_basics
+        juce::juce_audio_devices
         juce::juce_audio_processors
+        juce::juce_audio_utils
         juce::juce_dsp
         juce::juce_core
         juce::juce_recommended_config_flags

@@ -8,6 +8,7 @@ HecateAudioProcessor::HecateAudioProcessor()
           .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
+    params.inputTrim = apvts.getRawParameterValue(param::inputTrim);
     params.octaveDirect = apvts.getRawParameterValue(param::octaveDirect);
     params.octaveLevel = apvts.getRawParameterValue(param::octaveLevel);
     params.gateOn = apvts.getRawParameterValue(param::gateOn);
@@ -15,11 +16,15 @@ HecateAudioProcessor::HecateAudioProcessor()
     params.gain = apvts.getRawParameterValue(param::gain);
     params.tight = apvts.getRawParameterValue(param::tight);
     params.boost = apvts.getRawParameterValue(param::boost);
+    params.clipMode = apvts.getRawParameterValue(param::clipMode);
     params.tone = apvts.getRawParameterValue(param::tone);
     params.bass = apvts.getRawParameterValue(param::bass);
     params.mid = apvts.getRawParameterValue(param::mid);
+    params.midFreq = apvts.getRawParameterValue(param::midFreq);
     params.treble = apvts.getRawParameterValue(param::treble);
     params.presence = apvts.getRawParameterValue(param::presence);
+    params.sag = apvts.getRawParameterValue(param::sag);
+    params.depth = apvts.getRawParameterValue(param::depth);
     params.compOn = apvts.getRawParameterValue(param::compOn);
     params.compThreshold = apvts.getRawParameterValue(param::compThreshold);
     params.compRatio = apvts.getRawParameterValue(param::compRatio);
@@ -36,6 +41,10 @@ HecateAudioProcessor::HecateAudioProcessor()
     params.reverbPreDelay = apvts.getRawParameterValue(param::reverbPreDelay);
     params.reverbWet = apvts.getRawParameterValue(param::reverbWet);
     params.reverbDry = apvts.getRawParameterValue(param::reverbDry);
+    params.irBlend = apvts.getRawParameterValue(param::irBlend);
+    params.cabLowCut = apvts.getRawParameterValue(param::cabLowCut);
+    params.cabHighCut = apvts.getRawParameterValue(param::cabHighCut);
+    params.doubler = apvts.getRawParameterValue(param::doubler);
     params.outputGain = apvts.getRawParameterValue(param::outputGain);
 }
 
@@ -46,24 +55,27 @@ void HecateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
     spec.numChannels = (juce::uint32)getTotalNumOutputChannels();
 
-    gate.prepare(spec);
-    gate.setRatio(10.0f);
-    gate.setAttack(1.0f);
-    gate.setRelease(60.0f);
-
+    gate.prepare(sampleRate, samplesPerBlock);
     octaver.prepare(sampleRate, samplesPerBlock);
-    saturator.prepare(sampleRate, samplesPerBlock);
     compressor.prepare(sampleRate, samplesPerBlock);
+    saturator.prepare(sampleRate, samplesPerBlock);
     equalizer.prepare(sampleRate, samplesPerBlock);
+    powerAmp.prepare(sampleRate, samplesPerBlock);
     cabinet.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
 
     chorus.prepare(spec);
     chorus.setCentreDelay(7.0f);
     chorus.setFeedback(0.0f);
 
+    doublerFx.prepare(sampleRate, samplesPerBlock);
     delay.prepare(sampleRate, samplesPerBlock);
     reverb.prepare(sampleRate, samplesPerBlock);
 
+    limiter.prepare(spec);
+    limiter.setThreshold(-0.3f);
+    limiter.setRelease(60.0f);
+
+    lastTrimGain = juce::Decibels::decibelsToGain(params.inputTrim->load());
     lastOutputGain = params.outputGain->load();
 
     setLatencySamples(saturator.getLatencySamples());
@@ -107,39 +119,45 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     const int numSamples = buffer.getNumSamples();
 
-    juce::dsp::AudioBlock<float> block(buffer);
-    juce::dsp::ProcessContextReplacing<float> context(block);
+    const float trimGain = juce::Decibels::decibelsToGain(params.inputTrim->load());
+    buffer.applyGainRamp(0, numSamples, lastTrimGain, trimGain);
+    lastTrimGain = trimGain;
 
-    // Gate keys off the raw input, before the octaver adds content
+    meterInput.store(juce::jmax(buffer.getMagnitude(0, numSamples),
+                                meterInput.load() * 0.85f));
+
     if (params.gateOn->load() > 0.5f)
-    {
-        const float preGateLevel = buffer.getMagnitude(0, numSamples);
-        gate.setThreshold(params.gateThreshold->load());
-        gate.process(context);
-        const float postGateLevel = buffer.getMagnitude(0, numSamples);
-        meterGateOpen.store(preGateLevel < 1.0e-4f || postGateLevel > preGateLevel * 0.25f);
-    }
+        meterGateOpen.store(gate.process(buffer, params.gateThreshold->load()));
     else
-    {
         meterGateOpen.store(true);
-    }
 
     octaver.process(buffer, params.octaveLevel->load(), params.octaveDirect->load());
-
-    saturator.process(buffer, params.gain->load(), params.tight->load(),
-                      params.tone->load(), params.boost->load() > 0.5f);
 
     if (params.compOn->load() > 0.5f)
         compressor.process(buffer, params.compThreshold->load(), params.compRatio->load());
 
+    saturator.process(buffer, params.gain->load(), params.tight->load(),
+                      params.tone->load(), params.boost->load() > 0.5f,
+                      (int)params.clipMode->load());
+
     equalizer.process(buffer, params.bass->load(), params.mid->load(),
-                      params.treble->load(), params.presence->load());
-    cabinet.process(buffer);
+                      params.midFreq->load(), params.treble->load());
+
+    powerAmp.process(buffer, params.sag->load(), params.presence->load(),
+                     params.depth->load());
+
+    cabinet.process(buffer, params.irBlend->load(), params.cabLowCut->load(),
+                    params.cabHighCut->load());
+
+    juce::dsp::AudioBlock<float> block(buffer);
+    juce::dsp::ProcessContextReplacing<float> context(block);
 
     chorus.setRate(params.chorusRate->load());
     chorus.setDepth(params.chorusDepth->load());
     chorus.setMix(params.chorusMix->load());
     chorus.process(context);
+
+    doublerFx.process(buffer, params.doubler->load());
 
     delay.process(buffer, resolveDelayTimeMs(), params.delayFeedback->load(),
                   params.delayMix->load());
@@ -151,7 +169,9 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
     buffer.applyGainRamp(0, numSamples, lastOutputGain, outputGain);
     lastOutputGain = outputGain;
 
-    // Peak level with a slow fall for the output meter
+    // Safety limiter so no preset or IR combination can clip the host
+    limiter.process(context);
+
     const float peak = buffer.getMagnitude(0, numSamples);
     meterOutput.store(juce::jmax(peak, meterOutput.load() * 0.85f));
 }
@@ -195,41 +215,50 @@ void HecateAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     if (auto xml = juce::XmlDocument::parse(xmlString))
     {
         apvts.state = juce::ValueTree::fromXml(*xml);
-
-        auto irPath = apvts.state.getProperty("irPath").toString();
-        if (irPath.isNotEmpty())
-        {
-            juce::File irFile(irPath);
-
-            // Fall back to ~/Documents/Hecate/IRs/<name> if the file moved
-            if (!irFile.existsAsFile())
-                irFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
-                             .getChildFile("Hecate").getChildFile("IRs")
-                             .getChildFile(irFile.getFileName());
-
-            if (irFile.existsAsFile())
-                loadImpulseResponse(irFile);
-            else
-                clearImpulseResponse();
-        }
-        else
-        {
-            clearImpulseResponse();
-        }
+        reloadImpulseResponsesFromState();
     }
 }
 
-void HecateAudioProcessor::loadImpulseResponse(const juce::File& file)
+void HecateAudioProcessor::reloadImpulseResponsesFromState()
 {
-    cabinet.loadImpulseResponse(file);
-    if (cabinet.isUserLoaded())
-        apvts.state.setProperty("irPath", file.getFullPathName(), nullptr);
+    const char* pathProperties[] = {"irPath", "irPath2"};
+
+    for (int slot = 0; slot < 2; ++slot)
+    {
+        const auto irPath = apvts.state.getProperty(pathProperties[slot]).toString();
+        if (irPath.isEmpty())
+        {
+            clearImpulseResponse(slot);
+            continue;
+        }
+
+        juce::File irFile(irPath);
+
+        // Fall back to ~/Documents/Hecate/IRs/<name> if the file moved
+        if (!irFile.existsAsFile())
+            irFile = juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                         .getChildFile("Hecate").getChildFile("IRs")
+                         .getChildFile(irFile.getFileName());
+
+        if (irFile.existsAsFile())
+            loadImpulseResponse(irFile, slot);
+        else
+            clearImpulseResponse(slot);
+    }
 }
 
-void HecateAudioProcessor::clearImpulseResponse()
+void HecateAudioProcessor::loadImpulseResponse(const juce::File& file, int slot)
 {
-    cabinet.clear();
-    apvts.state.removeProperty("irPath", nullptr);
+    cabinet.loadImpulseResponse(file, slot);
+    if (cabinet.isUserLoaded(slot))
+        apvts.state.setProperty(slot == 0 ? "irPath" : "irPath2",
+                                file.getFullPathName(), nullptr);
+}
+
+void HecateAudioProcessor::clearImpulseResponse(int slot)
+{
+    cabinet.clearSlot(slot);
+    apvts.state.removeProperty(slot == 0 ? "irPath" : "irPath2", nullptr);
 }
 
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()

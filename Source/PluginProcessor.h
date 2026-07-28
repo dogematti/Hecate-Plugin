@@ -4,17 +4,22 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "Parameters.h"
+#include "DSP/GateProcessor.h"
 #include "DSP/Octaver.h"
 #include "DSP/Saturator.h"
 #include "DSP/Equalizer.h"
 #include "DSP/Compressor.h"
+#include "DSP/PowerAmp.h"
 #include "DSP/CabinetSimulator.h"
+#include "DSP/Doubler.h"
 #include "DSP/StereoDelay.h"
 #include "DSP/StereoReverb.h"
 
-// Signal chain: input gain -> gate -> octaver -> saturator (tight/boost/
-// gain/tone) -> compressor -> EQ -> cabinet IR -> chorus -> delay -> reverb
-// -> output gain.
+// Signal chain: input trim -> gate -> octaver -> compressor (sustain, pre-
+// drive) -> saturator (tight/boost/gain/tone, split-band, 4x oversampled)
+// -> EQ (bass / semi-parametric mid / treble) -> power amp (sag, presence,
+// depth) -> dual cabinet IR with trim filters -> chorus -> doubler -> delay
+// -> reverb -> output gain -> safety limiter.
 class HecateAudioProcessor : public juce::AudioProcessor
 {
 public:
@@ -43,12 +48,16 @@ public:
     void getStateInformation(juce::MemoryBlock& destData) override;
     void setStateInformation(const void* data, int sizeInBytes) override;
 
-    void loadImpulseResponse(const juce::File& file);
-    void clearImpulseResponse();
-    bool isUserImpulseResponseLoaded() const { return cabinet.isUserLoaded(); }
-    juce::String getImpulseResponseName() const { return cabinet.getName(); }
+    void loadImpulseResponse(const juce::File& file, int slot);
+    void clearImpulseResponse(int slot);
+    bool isUserImpulseResponseLoaded(int slot) const { return cabinet.isUserLoaded(slot); }
+    juce::String getImpulseResponseName(int slot) const { return cabinet.getName(slot); }
+
+    // Re-loads both IR slots from the "irPath"/"irPath2" state properties
+    void reloadImpulseResponsesFromState();
 
     // Meter values for the editor (updated every block)
+    float getInputLevel() const { return meterInput.load(); }
     float getOutputLevel() const { return meterOutput.load(); }
     float getGainReductionDb() const { return compressor.getGainReductionDb(); }
     bool isGateOpen() const { return meterGateOpen.load(); }
@@ -61,6 +70,7 @@ private:
     // Raw atomic values cached once so processBlock never does string lookups
     struct ParameterValues
     {
+        std::atomic<float>* inputTrim = nullptr;
         std::atomic<float>* octaveDirect = nullptr;
         std::atomic<float>* octaveLevel = nullptr;
         std::atomic<float>* gateOn = nullptr;
@@ -68,11 +78,15 @@ private:
         std::atomic<float>* gain = nullptr;
         std::atomic<float>* tight = nullptr;
         std::atomic<float>* boost = nullptr;
+        std::atomic<float>* clipMode = nullptr;
         std::atomic<float>* tone = nullptr;
         std::atomic<float>* bass = nullptr;
         std::atomic<float>* mid = nullptr;
+        std::atomic<float>* midFreq = nullptr;
         std::atomic<float>* treble = nullptr;
         std::atomic<float>* presence = nullptr;
+        std::atomic<float>* sag = nullptr;
+        std::atomic<float>* depth = nullptr;
         std::atomic<float>* compOn = nullptr;
         std::atomic<float>* compThreshold = nullptr;
         std::atomic<float>* compRatio = nullptr;
@@ -89,26 +103,35 @@ private:
         std::atomic<float>* reverbPreDelay = nullptr;
         std::atomic<float>* reverbWet = nullptr;
         std::atomic<float>* reverbDry = nullptr;
+        std::atomic<float>* irBlend = nullptr;
+        std::atomic<float>* cabLowCut = nullptr;
+        std::atomic<float>* cabHighCut = nullptr;
+        std::atomic<float>* doubler = nullptr;
         std::atomic<float>* outputGain = nullptr;
     };
 
     ParameterValues params;
 
-    juce::dsp::NoiseGate<float> gate;
+    GateProcessor gate;
     Octaver octaver;
-    Saturator saturator;
     Compressor compressor;
+    Saturator saturator;
     Equalizer equalizer;
+    PowerAmp powerAmp;
     CabinetSimulator cabinet;
     juce::dsp::Chorus<float> chorus;
+    Doubler doublerFx;
     StereoDelay delay;
     StereoReverb reverb;
+    juce::dsp::Limiter<float> limiter;
 
-    // Previous block's gain, for click-free ramping
+    // Previous block's gains, for click-free ramping
+    float lastTrimGain = 1.0f;
     float lastOutputGain = 1.0f;
 
     int currentProgram = 0;
 
+    std::atomic<float> meterInput{0.0f};
     std::atomic<float> meterOutput{0.0f};
     std::atomic<bool> meterGateOpen{true};
 

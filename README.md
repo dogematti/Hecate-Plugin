@@ -1,61 +1,65 @@
 # Hecate
 
-A metal guitar amp suite plugin (AU + VST3) built with JUCE 8 and C++17.
+A metal guitar amp suite plugin (AU + VST3 + Standalone) built with JUCE 8 and C++17.
 
 ![Hecate](Assets/background.png)
 
 ## Signal chain
 
 ```
-Gate → Octaver → Amp (tight / boost / gain / tone, 2x oversampled)
-→ Compressor → 4-Band EQ → Cabinet IR → Chorus → Delay → Reverb → Output
+Input Trim → Gate → Octaver → Compressor → Amp (tight / boost / gain / tone,
+split-band, 4x oversampled) → 3-Band EQ → Power Amp (sag / presence / depth)
+→ Dual Cabinet IR → Chorus → Doubler → Delay → Reverb → Output → Limiter
 ```
 
 - **Octaver** — pedal-style octave-down with independent **Direct** (guitar) and
   **Octave** (sub) level knobs: turn Direct off to play the sub-octave voice alone
-- **Noise Gate** — keyed off the raw input, 10:1, 1 ms attack / 60 ms release,
-  switchable, with an activity LED
-- **Amp** — cascaded three-stage tanh preamp with interstage filtering and slight
-  asymmetry, +12..+60 dB of gain, run at 2x oversampling. **Tight** sweeps the
-  pre-drive high-pass 40–300 Hz; **Boost** adds a screamer-style mid hump (+8 dB
-  at 750 Hz) plus 6 dB of level; **Tone** is a 2nd-order low-pass sweep
-- **Compressor** — switchable, stereo-linked feed-forward with a gain-reduction meter
-- **EQ** — bass low shelf (100 Hz), mid bell (1 kHz), presence bell (4 kHz), treble
-  high shelf (8 kHz)
-- **Cabinet IR** — ships with a built-in synthesised 4x12 so it sounds finished out
-  of the box; load any WAV/AIFF/FLAC IR to replace it
-- **Chorus** — post-cab modulation (rate / depth / mix)
-- **Delay** — stereo, 50–1000 ms free or tempo-synced (1/4, 1/8., 1/8, 1/8T, 1/16),
-  damped feedback, smoothed time changes
-- **Reverb** — Freeverb-style true stereo with width, damping and pre-delay
+- **Noise Gate** — custom gate keyed off the raw input with hysteresis (4 dB) and
+  hold (20 ms) so palm-mute decays never chatter; switchable, with an activity LED
+- **Compressor** — pre-drive sustain compressor with auto make-up gain and a GR meter
+- **Amp** — split-band drive: below 120 Hz the signal takes a gently-saturated
+  parallel path so low-B stays full while the high band runs through a cascaded
+  three-stage clipper (screamer boost with true pre-clip low cut, bright-cap
+  emphasis around the clipper, interstage filtering, envelope-driven dynamic bias)
+  at 4x oversampling. Three voicings: **Tube**, **Modern**, **Fuzz** (doom).
+  **Tight** sweeps the pre-drive high-pass 40–300 Hz
+- **EQ** — bass shelf (100 Hz), **semi-parametric mid** (250 Hz–2 kHz — metal
+  scoops live at 350–700 Hz), treble shelf (8 kHz)
+- **Power Amp** — **Sag** (touch-responsive bloom), **Presence** (3.5 kHz) and
+  **Depth** (100 Hz resonance) — the "chest thump" controls
+- **Dual Cabinet IR** — two slots with equal-power blend, low/high trim filters,
+  and a built-in synthesised 4x12 (low cut at 62 Hz — safe for 7-string
+  fundamentals) so it sounds finished out of the box
+- **Doubler** — quad-track-style widener with drifting ghost takes
+- **Chorus / Delay / Reverb** — delay is free or tempo-synced with damped feedback;
+  reverb is Freeverb-style true stereo with width, damping and pre-delay
+- **Output limiter** — always-on safety ceiling; no preset can clip the host
 
 ## Cabinet IR + mic placement browser
 
-The CAB tab loads impulse responses and understands mic-organised packs: if the
-loaded IR lives in a layout like `<pack>/<mic>/<position>.wav` (for example the
-free [overdriven.fr](https://overdriven.fr) sets), the **Mic** and **Position**
-menus step through the pack, keeping the position when you switch mics. The IR
-path is saved with the session, with a fallback search in `~/Documents/Hecate/IRs`
-if the file moves.
+The CAB tab loads impulse responses into two blendable slots and understands
+mic-organised packs: if slot A's IR lives in a layout like
+`<pack>/<mic>/<position>.wav` (for example the free [overdriven.fr](https://overdriven.fr)
+sets), the **Mic** and **Position** menus step through the pack. IR paths are
+saved with the session, with a fallback search in `~/Documents/Hecate/IRs`.
 
 Third-party IR files are not included in this repository — most IR licenses
-(including overdriven.fr's) forbid redistributing them with software. Download
-packs yourself and keep them in `~/Documents/Hecate/IRs`.
+forbid redistributing them with software. Download packs yourself and keep
+them in `~/Documents/Hecate/IRs`.
 
 ## UI
 
-Three tabs — **AMP** (octave, gate, amp, EQ, dynamics, output), **FX** (chorus,
-delay, reverb) and **CAB** (IR loader + mic browser) — laid over the artwork at
-its native aspect ratio, with controls set into the lower half. The header keeps
-the preset menu and slim output / gain-reduction / gate meters visible on every
-tab. The window resizes 50–200% (size remembered), knobs reset on double-click,
-and values pop up while dragging.
+Three tabs — **AMP**, **FX** and **CAB** — over the artwork at its native
+aspect ratio. Header: preset menu with prev/next arrows, save, **A/B compare**,
+and always-visible in/out/GR meters plus a gate LED. Resizable 50–200%,
+double-click-to-default knobs, drag popups for values.
 
 ## Presets
 
-Seven factory presets (Modern Rhythm, Djent, Doom, Solo Lead, Clean Shimmer,
-Ambient Swells + Default) exposed as host programs and in the in-plugin preset
-menu. User presets save as XML to `~/Documents/Hecate/Presets`.
+Nine factory presets — Modern Rhythm, **7-String Rhythm**, **7-String Scoop**,
+Djent, Doom (fuzz voicing), Solo Lead, Clean Shimmer, Ambient Swells + Default —
+exposed as host programs and in the preset menu. User presets save as XML to
+`~/Documents/Hecate/Presets`.
 
 ## Building
 
@@ -66,6 +70,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
-On macOS this builds and installs AU + VST3 to `~/Library/Audio/Plug-Ins/`
-(run `auval -v aufx Hct1 Hcte` to re-validate after changes); on Linux/Windows
-it builds VST3.
+macOS builds AU + VST3 + Standalone and installs the plugins to
+`~/Library/Audio/Plug-Ins/` (`auval -v aufx Hct1 Hcte` re-validates);
+Linux/Windows build VST3 + Standalone. CI builds macOS and Linux on every
+push and runs pluginval against the VST3.
