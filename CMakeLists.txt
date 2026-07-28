@@ -30,6 +30,8 @@ juce_add_plugin(Hecate
     COPY_PLUGIN_AFTER_BUILD TRUE
     PLUGIN_MANUFACTURER_CODE Hcte
     PLUGIN_CODE Hct1
+    ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.iconset/icon_512x512@2x.png"
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/AppIcon.iconset/icon_128x128.png"
     FORMATS ${PLUGIN_FORMATS}
     VST3_CATEGORIES "Fx" "Distortion"
 )
