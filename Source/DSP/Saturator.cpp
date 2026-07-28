@@ -12,6 +12,61 @@ namespace
     {
         return 1.0f - std::exp(-1.0f / (timeMs * 0.001f * (float)sampleRate));
     }
+
+    // One row per amp channel; order matches param::channelChoices
+    // (Clean, Rhythm, Lead, Thall, Doom). This table IS the amp's voice —
+    // tune sounds by editing rows, not code.
+    struct Voicing
+    {
+        float driveScale;      // scales both drive halves
+        float interstageLpHz;  // fizz control between stages
+        float padDb;           // interstage attenuation into stage 2
+        float stage2Gain;
+        float biasBase, biasDepth;   // static + envelope-driven asymmetry
+        float clipGain;        // stage 3 drive
+        bool fuzzClip;         // hard clip instead of tanh in stage 3
+        float brightDb;        // bright-cap emphasis around the clipper
+        float screamerHpHz;    // boost pedal low-cut corner
+    };
+
+    constexpr Voicing kVoicings[] = {
+        // Clean: barely-driven, open top
+        {0.35f, 12000.0f,  -8.0f, 1.2f, 0.05f, 0.10f, 0.9f, false, 3.0f, 720.0f},
+        // Rhythm: the tight modern high-gain core
+        {1.00f,  9500.0f, -12.0f, 2.0f, 0.15f, 0.35f, 1.6f, false, 6.0f, 720.0f},
+        // Lead: smoother, more compression and bloom
+        {1.10f,  8000.0f, -10.0f, 2.2f, 0.20f, 0.40f, 1.1f, false, 5.0f, 720.0f},
+        // Thall: dry, clanky, aggressive top, higher boost corner
+        {1.05f, 10500.0f, -12.0f, 2.4f, 0.10f, 0.25f, 1.9f, false, 7.0f, 900.0f},
+        // Doom: fuzz clipping, thick and dark
+        {1.20f,  7000.0f,  -9.0f, 2.6f, 0.15f, 0.30f, 2.2f, true,  3.0f, 650.0f},
+    };
+}
+
+void Saturator::applyChannel(int channel)
+{
+    const int index = juce::jlimit(0, (int)std::size(kVoicings) - 1, channel);
+    if (index == currentChannel)
+        return;
+
+    currentChannel = index;
+    const auto& voicing = kVoicings[(size_t)index];
+
+    vDriveScale = voicing.driveScale;
+    vPadGain = juce::Decibels::decibelsToGain(voicing.padDb);
+    vStage2Gain = voicing.stage2Gain;
+    vBiasBase = voicing.biasBase;
+    vBiasDepth = voicing.biasDepth;
+    vClipGain = voicing.clipGain;
+    vFuzzClip = voicing.fuzzClip;
+
+    interstageLpCoeff = onePoleCoeff(voicing.interstageLpHz, oversampledRate);
+    screamerHpCoeff = onePoleCoeff(voicing.screamerHpHz, sampleRate);
+
+    *preEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
+        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(voicing.brightDb));
+    *deEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
+        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(-voicing.brightDb));
 }
 
 void Saturator::prepare(double newSampleRate, int maxBlockSize)
@@ -26,14 +81,8 @@ void Saturator::prepare(double newSampleRate, int maxBlockSize)
     tightFilter.prepare(spec);
     tightFilter.setType(juce::dsp::StateVariableTPTFilterType::highpass);
 
-    // Bright-cap shelves never change: build coefficients once here
     preEmphasisFilter.prepare(spec);
-    *preEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(brightShelfDb));
-
     deEmphasisFilter.prepare(spec);
-    *deEmphasisFilter.state = *juce::dsp::IIR::Coefficients<float>::makeHighShelf(
-        sampleRate, brightShelfHz, brightShelfQ, juce::Decibels::decibelsToGain(-brightShelfDb));
 
     oversampler = std::make_unique<juce::dsp::Oversampling<float>>(
         2, 2, juce::dsp::Oversampling<float>::filterHalfBandPolyphaseIIR, true);
@@ -45,18 +94,21 @@ void Saturator::prepare(double newSampleRate, int maxBlockSize)
     lowBandDelay.setMaximumDelayInSamples((int)std::ceil(lowBandDelaySamples) + 8);
     lowBandDelay.prepare(spec);
 
-    const double oversampledRate = sampleRate * 4.0;
+    oversampledRate = sampleRate * 4.0;
 
     splitCoeff = onePoleCoeff(splitCrossoverHz, sampleRate);
-    screamerHpCoeff = onePoleCoeff(screamerHighPassHz, sampleRate);
     screamerLpCoeff = onePoleCoeff(screamerLowPassHz, sampleRate);
     dcCoeff = onePoleCoeff(dcBlockerHz, sampleRate);
 
     interstageHpCoeff = onePoleCoeff(interstageHighPassHz, oversampledRate);
-    interstageLpCoeff = onePoleCoeff(interstageLowPassHz, oversampledRate);
     stageLpCoeff = onePoleCoeff(stageLowPassHz, oversampledRate);
     envAttackCoeff = timeConstantCoeff(envAttackMs, oversampledRate);
     envReleaseCoeff = timeConstantCoeff(envReleaseMs, oversampledRate);
+
+    // Load the voiced coefficients (keeps the selected channel across prepares)
+    const int keepChannel = currentChannel < 0 ? 1 : currentChannel;
+    currentChannel = -1;
+    applyChannel(keepChannel);
 
     reset();
 }
@@ -92,10 +144,13 @@ int Saturator::getLatencySamples() const
     return oversampler != nullptr ? (int)std::ceil(oversampler->getLatencyInSamples()) : 0;
 }
 
-void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tightHz, float tone, bool boost, int clipMode)
+void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tightHz,
+                        float tone, bool boost, int channel)
 {
     if (oversampler == nullptr)
         return;
+
+    applyChannel(channel);
 
     const int numChannels = juce::jmin(buffer.getNumChannels(), 2);
     const int numSamples = buffer.getNumSamples();
@@ -160,8 +215,8 @@ void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tigh
 
     // 5. 4x oversampled three-stage clipping cascade
     const float driveDb = minDriveDb + gain * driveRangeDb;
-    const float half = juce::Decibels::decibelsToGain(driveDb * 0.5f);
-    const float pad = juce::Decibels::decibelsToGain(interstagePadDb);
+    const float half = juce::Decibels::decibelsToGain(driveDb * 0.5f) * vDriveScale;
+    const float pad = vPadGain;
 
     auto upsampled = oversampler->processSamplesUp(block);
 
@@ -187,21 +242,18 @@ void Saturator::process(juce::AudioBuffer<float>& buffer, float gain, float tigh
             // Dynamic asymmetry: bias rides the stage 1 envelope
             const float rectified = std::abs(stage1);
             env += (rectified > env ? envAttackCoeff : envReleaseCoeff) * (rectified - env);
-            const float bias = biasBase + biasDepth * juce::jmin(1.0f, env);
+            const float bias = vBiasBase + vBiasDepth * juce::jmin(1.0f, env);
 
             // Stage 2: second half of the drive, even harmonics from the bias
-            x = std::tanh(stage2Gain * x * half + bias) - std::tanh(bias);
+            x = std::tanh(vStage2Gain * x * half + bias) - std::tanh(bias);
 
             sLpState += stageLpCoeff * (x - sLpState);
             x = sLpState;
 
-            // Stage 3: output stage character
-            switch (clipMode)
-            {
-                case 0:  x = std::tanh(tubeStageGain * x); break;
-                case 1:  x = std::tanh(modernStageGain * x); break;
-                default: x = juce::jlimit(-fuzzClipLevel, fuzzClipLevel, x * fuzzStageGain) * fuzzMakeup; break;
-            }
+            // Stage 3: output stage character (voiced)
+            x = vFuzzClip
+                    ? juce::jlimit(-fuzzClipLevel, fuzzClipLevel, x * vClipGain) * fuzzMakeup
+                    : std::tanh(vClipGain * x);
 
             samples[i] = x;
         }

@@ -52,7 +52,9 @@ namespace
          "Compressor threshold (pre-drive sustain compressor; enable with ON)."},
         {param::compRatio,      "Ratio",    764, kRow2Y, kKnobSize, kAmpPage,
          "Compression ratio."},
-        {param::outputGain,     "Output",   870, kRow2Y, kKnobSize, kAmpPage,
+        {param::cleanBlend,     "Clean",    856, kRow2Y, kKnobSize, kAmpPage,
+         "Parallel undistorted signal mixed in after the cab — clarity under the chaos (the thall trick)."},
+        {param::outputGain,     "Output",   942, kRow2Y, kKnobSize, kAmpPage,
          "Final level. A safety limiter after this stops host clipping."},
 
         // FX page
@@ -102,7 +104,7 @@ namespace
          "Low-pass after the cab — tames fizzy IRs. Fully right = off."},
     };
 
-    constexpr int kDelayTimeKnobIndex = 22;
+    constexpr int kDelayTimeKnobIndex = 23;
 
     // Engraved section rules: small-caps title with a hairline running to x+w
     struct SectionDef { const char* title; int x; int w; int y; int page; };
@@ -113,8 +115,8 @@ namespace
         {"VOICING",   740, 250, 306, kAmpPage},
         {"EQ",         30, 334, 444, kAmpPage},
         {"POWER",     400, 248, 444, kAmpPage},
-        {"DYNAMICS",  678, 162, 444, kAmpPage},
-        {"OUTPUT",    870,  76, 444, kAmpPage},
+        {"DYNAMICS",  678, 148, 444, kAmpPage},
+        {"MASTER",    856, 162, 444, kAmpPage},
 
         {"CHORUS",     30, 420, 306, kFxPage},
         {"DELAY",     490, 338, 306, kFxPage},
@@ -241,10 +243,17 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     syncBox.onChange = [this] { updateDelayTimeEnablement(); };
     updateDelayTimeEnablement();
 
-    addAndMakeVisible(clipBox);
-    for (int i = 0; i < (int)std::size(param::clipModeChoices); ++i)
-        clipBox.addItem(param::clipModeChoices[i], i + 1);
-    clipAttachment = std::make_unique<ComboBoxAttachment>(processor.apvts, param::clipMode, clipBox);
+    addAndMakeVisible(channelBox);
+    for (int i = 0; i < (int)std::size(param::channelChoices); ++i)
+        channelBox.addItem(param::channelChoices[i], i + 1);
+    channelAttachment = std::make_unique<ComboBoxAttachment>(processor.apvts, param::channel, channelBox);
+    channelBox.setTooltip("Amp channel: a full voicing change (gain staging, filtering, clip curve), not just a preset.");
+
+    addAndMakeVisible(dropBox);
+    for (int i = 0; i < (int)std::size(param::dropTuneChoices); ++i)
+        dropBox.addItem(param::dropTuneChoices[i], i + 1);
+    dropAttachment = std::make_unique<ComboBoxAttachment>(processor.apvts, param::dropTune, dropBox);
+    dropBox.setTooltip("Virtual drop-tune: shifts your whole guitar down in semitones. Off = zero latency.");
 
     addAndMakeVisible(presetBox);
     presetBox.setTextWhenNothingSelected("Default");
@@ -380,7 +389,6 @@ HecateAudioProcessorEditor::Content::Content(HecateAudioProcessor& p)
     boostButton.setTooltip("Screamer-style boost: pre-clip low cut plus a 750 Hz push. The metal recipe.");
     gateButton.setTooltip("Noise gate on/off.");
     compButton.setTooltip("Sustain compressor on/off (sits before the drive).");
-    clipBox.setTooltip("Output stage voicing: Tube (soft), Modern (tight), Fuzz (doom).");
     syncBox.setTooltip("Delay sync: Free uses the Time knob, note values follow the host tempo.");
 
     updateIRLabels();
@@ -438,7 +446,7 @@ void HecateAudioProcessorEditor::Content::setPage(int newPage)
     }
 
     for (auto* component : std::initializer_list<juce::Component*>{
-             &gateButton, &boostButton, &compButton, &clipBox})
+             &gateButton, &boostButton, &compButton, &channelBox, &dropBox})
         component->setVisible(currentPage == kAmpPage);
     for (auto* component : std::initializer_list<juce::Component*>{
              &syncBox, &tapButton, &pingButton})
@@ -621,9 +629,7 @@ void HecateAudioProcessorEditor::Content::rebuildIRCurves()
         const auto& builtIn = processor.getDefaultCabImpulse();
         if (builtIn.getNumSamples() > 0)
             irCurveA = buildResponsePath(builtIn.getReadPointer(0), builtIn.getNumSamples(),
-                                         processor.getSampleRate() > 0.0
-                                             ? processor.getSampleRate() : 44100.0,
-                                         area);
+                                         processor.getDefaultCabImpulseSampleRate(), area);
     }
 
     if (processor.isUserImpulseResponseLoaded(1))
@@ -1113,9 +1119,10 @@ void HecateAudioProcessorEditor::Content::resized()
     cabTabButton.setBounds(940, 8, 68, 28);
 
     gateButton.setBounds(318, 288, 46, 18);
+    dropBox.setBounds(244, 286, 66, 20);
     boostButton.setBounds(740, 318, 56, 20);
-    clipBox.setBounds(740, 348, 96, 22);
-    compButton.setBounds(796, 426, 44, 16);
+    channelBox.setBounds(740, 348, 96, 22);
+    compButton.setBounds(778, 426, 44, 16);
     syncBox.setBounds(664, 286, 58, 20);
     tapButton.setBounds(728, 286, 44, 20);
     pingButton.setBounds(778, 286, 48, 20);

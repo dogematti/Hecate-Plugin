@@ -1,4 +1,7 @@
 #include "CabinetSimulator.h"
+#include "BinaryData.h"
+
+#include <juce_audio_formats/juce_audio_formats.h>
 
 void CabinetSimulator::prepare(double newSampleRate, int maxBlockSize, int numChannels)
 {
@@ -181,67 +184,30 @@ juce::String CabinetSimulator::getName(int slot) const
     return slot == 0 ? nameA : nameB;
 }
 
-// Approximates a miked 4x12: steep low cut ~62 Hz, a low thump at 105 Hz,
-// scoops at 240 Hz and 1.4 kHz, a presence peak at 3.3 kHz, then a steep
-// 4th-order speaker roll-off from 5.4 kHz. Built by running a unit impulse
-// through IIR filters, adding two short early-reflection taps for comb
-// texture (cone/cab reflections) and windowing the tail.
+// The built-in cab is a real IR (Assets/default-cab.wav, captured by the
+// project's author) embedded in the binary, so the amp sounds like a miked
+// cabinet with zero setup. Convolution resamples it to the session rate.
 void CabinetSimulator::loadDefaultCabinet()
 {
-    const int length = juce::jmax(512, (int)(sampleRate * 0.06));
-    juce::AudioBuffer<float> ir(2, length);
-    ir.clear();
-    ir.setSample(0, 0, 1.0f);
-
-    using Coefficients = juce::dsp::IIR::Coefficients<float>;
-    const std::vector<juce::dsp::IIR::Coefficients<float>::Ptr> stages = {
-        Coefficients::makeHighPass(sampleRate, 62.0f, 1.1f),
-        Coefficients::makePeakFilter(sampleRate, 105.0f, 1.3f, juce::Decibels::decibelsToGain(6.0f)),
-        Coefficients::makePeakFilter(sampleRate, 240.0f, 2.0f, juce::Decibels::decibelsToGain(-4.0f)),
-        Coefficients::makePeakFilter(sampleRate, 1400.0f, 2.0f, juce::Decibels::decibelsToGain(-3.0f)),
-        Coefficients::makePeakFilter(sampleRate, 3300.0f, 1.4f, juce::Decibels::decibelsToGain(4.0f)),
-        Coefficients::makeLowPass(sampleRate, 5400.0f, 0.541f),   // 4th-order Butterworth pair
-        Coefficients::makeLowPass(sampleRate, 5400.0f, 1.307f),
-        Coefficients::makeLowPass(sampleRate, 6200.0f, 0.7f),
-    };
-
-    auto* samples = ir.getWritePointer(0);
-    for (const auto& coeffs : stages)
+    // Decode a copy for the editor's response display
+    juce::AudioFormatManager formats;
+    formats.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader(formats.createReaderFor(
+        std::make_unique<juce::MemoryInputStream>(BinaryData::defaultcab_wav,
+                                                  (size_t)BinaryData::defaultcab_wavSize, false)));
+    if (reader != nullptr)
     {
-        juce::dsp::IIR::Filter<float> filter(coeffs);
-        filter.reset();
-        for (int i = 0; i < length; ++i)
-            samples[i] = filter.processSample(samples[i]);
+        const int numSamples = (int)std::min<juce::int64>(reader->lengthInSamples, 1 << 16);
+        defaultIrCopy.setSize((int)reader->numChannels, numSamples);
+        reader->read(&defaultIrCopy, 0, numSamples, 0, true, reader->numChannels > 1);
+        defaultIrSampleRate = reader->sampleRate;
     }
 
-    // Early-reflection comb texture: two short delayed taps of the filtered
-    // impulse. Iterate backwards so each tap reads the unmodified signal.
-    struct Tap { float delayMs, gainDb, polarity; };
-    const Tap taps[] = { { 0.35f, -13.0f, -1.0f },
-                         { 0.90f, -18.0f,  1.0f } };
-    for (const auto& tap : taps)
-    {
-        const int offset = juce::jmax(1, (int)std::round(sampleRate * tap.delayMs * 0.001));
-        const float gain = tap.polarity * juce::Decibels::decibelsToGain(tap.gainDb);
-        for (int i = length - 1; i >= offset; --i)
-            samples[i] += gain * samples[i - offset];
-    }
-
-    // Fade the tail so the IIR truncation doesn't click
-    const int fadeStart = length / 4;
-    for (int i = fadeStart; i < length; ++i)
-    {
-        const float t = (float)(i - fadeStart) / (float)(length - fadeStart);
-        samples[i] *= std::exp(-5.0f * t);
-    }
-
-    ir.copyFrom(1, 0, ir, 0, 0, length);
-
-    defaultIrCopy.makeCopyOf(ir);
-
-    convolutionA.loadImpulseResponse(std::move(ir), sampleRate,
+    convolutionA.loadImpulseResponse(BinaryData::defaultcab_wav,
+                                     (size_t)BinaryData::defaultcab_wavSize,
                                      juce::dsp::Convolution::Stereo::yes,
-                                     juce::dsp::Convolution::Trim::no,
+                                     juce::dsp::Convolution::Trim::yes,
+                                     0,
                                      juce::dsp::Convolution::Normalise::yes);
-    nameA = "Built-in 4x12";
+    nameA = "Hecate Cab";
 }

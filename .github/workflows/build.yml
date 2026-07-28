@@ -20,6 +20,8 @@ jobs:
           -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
       - name: Build
         run: cmake --build build -j3
+      - name: Render harness
+        run: ./build/HecateRender_artefacts/Release/HecateRender renders
       - name: Download pluginval
         run: |
           curl -L "https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip" -o pluginval.zip
@@ -52,6 +54,8 @@ jobs:
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
         run: cmake --build build -j3
+      - name: Render harness
+        run: ./build/HecateRender_artefacts/Release/HecateRender renders
 
   windows:
     runs-on: windows-latest

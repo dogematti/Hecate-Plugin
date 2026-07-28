@@ -82,9 +82,9 @@ private:
         juce::Array<double> tapIntervals;
         void tapTempo();
 
-        juce::ComboBox syncBox, clipBox;
+        juce::ComboBox syncBox, channelBox, dropBox;
         std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment>
-            syncAttachment, clipAttachment;
+            syncAttachment, channelAttachment, dropAttachment;
 
         juce::ComboBox presetBox;
         juce::TextButton prevPresetButton{"<"}, nextPresetButton{">"};

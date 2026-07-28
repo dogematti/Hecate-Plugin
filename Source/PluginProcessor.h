@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 
 #include "Parameters.h"
+#include "DSP/DropTuner.h"
 #include "DSP/GateProcessor.h"
 #include "DSP/Octaver.h"
 #include "DSP/Saturator.h"
@@ -59,6 +60,7 @@ public:
     // Editor support: built-in cab IR for the response display, and a tap of
     // the raw (post-trim) input for the tuner
     const juce::AudioBuffer<float>& getDefaultCabImpulse() const { return cabinet.getDefaultImpulse(); }
+    double getDefaultCabImpulseSampleRate() const { return cabinet.getDefaultImpulseSampleRate(); }
     void readTunerBuffer(float* dest, int numSamples) const;
 
     // Meter values for the editor (updated every block)
@@ -80,6 +82,7 @@ private:
     struct ParameterValues
     {
         std::atomic<float>* inputTrim = nullptr;
+        std::atomic<float>* dropTune = nullptr;
         std::atomic<float>* octaveDirect = nullptr;
         std::atomic<float>* octaveLevel = nullptr;
         std::atomic<float>* gateOn = nullptr;
@@ -87,8 +90,9 @@ private:
         std::atomic<float>* gain = nullptr;
         std::atomic<float>* tight = nullptr;
         std::atomic<float>* boost = nullptr;
-        std::atomic<float>* clipMode = nullptr;
+        std::atomic<float>* channel = nullptr;
         std::atomic<float>* tone = nullptr;
+        std::atomic<float>* cleanBlend = nullptr;
         std::atomic<float>* bass = nullptr;
         std::atomic<float>* mid = nullptr;
         std::atomic<float>* midFreq = nullptr;
@@ -127,6 +131,7 @@ private:
 
     ParameterValues params;
 
+    DropTuner dropTuner;
     GateProcessor gate;
     Octaver octaver;
     Compressor compressor;
@@ -143,6 +148,16 @@ private:
     // Previous block's gains, for click-free ramping
     float lastTrimGain = 1.0f;
     float lastOutputGain = 1.0f;
+    float lastCleanBlend = 0.0f;
+
+    // Clean parallel path (captured pre-drive, mixed post-cab)
+    juce::AudioBuffer<float> cleanScratch;
+    float cleanHpState[2] = {0.0f, 0.0f};
+    float cleanLpState[2] = {0.0f, 0.0f};
+    float cleanHpCoeff = 0.0f;
+    float cleanLpCoeff = 0.0f;
+
+    int lastReportedLatency = -1;
 
     int currentProgram = 0;
     double currentSampleRate = 44100.0;

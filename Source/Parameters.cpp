@@ -76,11 +76,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
                                {40.0f, 300.0f, 1.0f}, 100.0f, hertzText()));
     params.push_back(makeBool(param::boost, "Boost", false));
     params.push_back(std::make_unique<juce::AudioParameterChoice>(
-        juce::ParameterID{param::clipMode, 1}, "Clip Voicing",
-        juce::StringArray(param::clipModeChoices,
-                          (int)std::size(param::clipModeChoices)), 1));
+        juce::ParameterID{param::channel, 1}, "Amp Channel",
+        juce::StringArray(param::channelChoices,
+                          (int)std::size(param::channelChoices)), 1));
+    params.push_back(std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID{param::dropTune, 1}, "Drop Tune",
+        juce::StringArray(param::dropTuneChoices,
+                          (int)std::size(param::dropTuneChoices)), 0));
     params.push_back(makeParam(param::tone, "Tone",
                                {0.0f, 1.0f, 0.01f}, 0.5f, percentText()));
+    params.push_back(makeParam(param::cleanBlend, "Clean Blend",
+                               {0.0f, 1.0f, 0.01f}, 0.0f, percentText()));
 
     params.push_back(makeParam(param::bass, "Bass",
                                {-12.0f, 12.0f, 0.1f}, 0.0f, decibelText()));

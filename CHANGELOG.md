@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.3.0 — 2026-07-28
+
+### Added
+- **Amp channels**: Clean / Rhythm / Lead / Thall / Doom — full voicing-table
+  rows (gain staging, interstage filtering, asymmetry, clip curve, boost
+  corner), not just clip switches. Voicing lives in one table in Saturator.cpp
+- **Real cabinet IR as the built-in default** ("Hecate Cab", captured by the
+  project author, embedded in the binary) replacing the synthesised 4x12
+- **Clean Blend** knob: parallel undistorted path mixed post-cab — clarity
+  under high gain, the thall trick
+- **Drop Tune**: -1..-4 semitone pitch shift on the raw guitar
+  (signalsmith-stretch); Off is a true zero-latency bypass, and host latency
+  updates when engaged
+- **Thall factory preset** (channel, deep 420 Hz scoop, clean blend, doubler)
+- **Offline render harness** (HecateRender): bounces a deterministic low-B
+  DI — or any WAV you pass it — through every factory preset, checks
+  NaN/silence/clipping, writes the renders; runs in CI as a DSP regression test
+
+### Changed
+- Tap tempo + expanded FX controls (chorus delay/feedback, delay damping and
+  ping-pong, doubler spread/drift) from the 0.2.x line are included
+- Clean Shimmer re-voiced on the Clean channel; Solo Lead on Lead; Doom on
+  the fuzz Doom channel
+
 ## 0.2.0 — 2026-07-28
 
 ### Fixed

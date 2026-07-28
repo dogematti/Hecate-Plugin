@@ -3,35 +3,40 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
-// High-gain preamp with split-band drive. Topology:
+// High-gain preamp with split-band drive and per-channel voicings. Topology:
 //
 //   variable "tight" high-pass
-//   -> split at 120 Hz: LOW band bypasses the drive (gentle tanh only),
-//      HIGH band continues:
-//        optional screamer boost (720 Hz HP -> 3.5 kHz LP -> +9 dB)
-//        -> bright-cap pre-emphasis (+6 dB shelf @ 1.4 kHz)
-//        -> [4x oversampled: stage 1 tanh -> interstage 10 Hz HP + 9.5 kHz LP
-//           + -14 dB pad -> stage 2 tanh with envelope-driven dynamic bias
-//           -> 12 kHz LP -> stage 3 clip (Tube / Modern / Fuzz)]
-//        -> bright-cap de-emphasis (-6 dB shelf @ 1.4 kHz)
+//   -> split at 120 Hz: LOW band bypasses the drive (gentle tanh only,
+//      delayed to match the oversampler), HIGH band continues:
+//        optional screamer boost (voiced HP -> 3.5 kHz LP -> +9 dB)
+//        -> bright-cap pre-emphasis (voiced shelf @ 1.4 kHz)
+//        -> [4x oversampled: stage 1 tanh -> interstage 10 Hz HP + voiced LP
+//           + voiced pad -> stage 2 tanh with envelope-driven dynamic bias
+//           -> 12 kHz LP -> stage 3 clip (voiced gain, tanh or fuzz)]
+//        -> bright-cap de-emphasis
 //        -> DC blocker (5 Hz)
 //   -> recombine bands -> 1st-order tone low-pass (2 kHz..16 kHz)
 //
-// Gain 0..1 sweeps +18..+72 dB of drive, applied as half-gain into each of
-// the first two stages. The dynamic bias shifts even-harmonic content with
-// playing intensity, the touch-sensitive tube feel.
+// Gain 0..1 sweeps +18..+72 dB of drive. The CHANNEL selects a full voicing
+// table row (Clean / Rhythm / Lead / Thall / Doom) — stage gains, interstage
+// filtering, asymmetry, clip curve and boost corner all change together, so
+// channels are genuinely different amps, and voicing an amp by ear means
+// editing one row in kVoicings (Saturator.cpp).
 class Saturator
 {
 public:
     void prepare(double sampleRate, int maxBlockSize);
     void reset();
 
-    // gain and tone 0..1, tightHz 40..300, clipMode: 0=Tube 1=Modern 2=Fuzz
-    void process(juce::AudioBuffer<float>& buffer, float gain, float tightHz, float tone, bool boost, int clipMode);
+    // gain and tone 0..1, tightHz 40..300, channel indexes param::channelChoices
+    void process(juce::AudioBuffer<float>& buffer, float gain, float tightHz,
+                 float tone, bool boost, int channel);
 
     int getLatencySamples() const;
 
 private:
+    void applyChannel(int channel);
+
     static constexpr float minDriveDb = 18.0f;
     static constexpr float driveRangeDb = 54.0f;
 
@@ -39,29 +44,18 @@ private:
     static constexpr float lowBandDrive = 3.0f;
     static constexpr float lowBandMakeup = 1.2f;
 
-    static constexpr float screamerHighPassHz = 720.0f;
     static constexpr float screamerLowPassHz = 3500.0f;
     static constexpr float screamerBoostDb = 9.0f;
 
     static constexpr float brightShelfHz = 1400.0f;
     static constexpr float brightShelfQ = 0.7f;
-    static constexpr float brightShelfDb = 6.0f;
 
     static constexpr float interstageHighPassHz = 10.0f;
-    static constexpr float interstageLowPassHz = 9500.0f;
-    static constexpr float interstagePadDb = -12.0f;
 
     static constexpr float envAttackMs = 0.5f;
     static constexpr float envReleaseMs = 40.0f;
-    static constexpr float biasBase = 0.15f;
-    static constexpr float biasDepth = 0.35f;
-    static constexpr float stage2Gain = 2.0f;
 
     static constexpr float stageLowPassHz = 12000.0f;
-
-    static constexpr float tubeStageGain = 1.1f;
-    static constexpr float modernStageGain = 1.6f;
-    static constexpr float fuzzStageGain = 2.2f;
     static constexpr float fuzzClipLevel = 0.8f;
     static constexpr float fuzzMakeup = 1.1f;
 
@@ -74,6 +68,7 @@ private:
                                                        juce::dsp::IIR::Coefficients<float>>;
 
     double sampleRate = 44100.0;
+    double oversampledRate = 176400.0;
     juce::dsp::StateVariableTPTFilter<float> tightFilter;
     FixedFilter preEmphasisFilter;
     FixedFilter deEmphasisFilter;
@@ -86,6 +81,16 @@ private:
     // band is delayed to match so the two stay time-aligned when recombined
     juce::dsp::DelayLine<float, juce::dsp::DelayLineInterpolationTypes::Lagrange3rd> lowBandDelay;
     float lowBandDelaySamples = 0.0f;
+
+    // Active voicing (loaded from kVoicings by applyChannel)
+    int currentChannel = -1;
+    float vDriveScale = 1.0f;
+    float vPadGain = 0.25f;
+    float vStage2Gain = 2.0f;
+    float vBiasBase = 0.15f;
+    float vBiasDepth = 0.35f;
+    float vClipGain = 1.6f;
+    bool vFuzzClip = false;
 
     // Per-channel one-pole states at the base rate
     float splitState[2] = {0.0f, 0.0f};
@@ -100,7 +105,8 @@ private:
     float stageLpState[2] = {0.0f, 0.0f};
     float envState[2] = {0.0f, 0.0f};
 
-    // Coefficients fixed in prepare (toneCoeff is recomputed per block)
+    // Coefficients fixed in prepare (voiced ones rebuilt in applyChannel,
+    // toneCoeff recomputed per block)
     float splitCoeff = 0.0f;
     float screamerHpCoeff = 0.0f;
     float screamerLpCoeff = 0.0f;

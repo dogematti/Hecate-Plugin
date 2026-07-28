@@ -21,19 +21,20 @@ split-band, 4x oversampled) → 3-Band EQ → Power Amp (sag / presence / depth)
 - **Noise Gate** — custom gate keyed off the raw input with hysteresis (4 dB) and
   hold (20 ms) so palm-mute decays never chatter; switchable, with an activity LED
 - **Compressor** — pre-drive sustain compressor with auto make-up gain and a GR meter
-- **Amp** — split-band drive: below 120 Hz the signal takes a gently-saturated
-  parallel path so low-B stays full while the high band runs through a cascaded
-  three-stage clipper (screamer boost with true pre-clip low cut, bright-cap
-  emphasis around the clipper, interstage filtering, envelope-driven dynamic bias)
-  at 4x oversampling. Three voicings: **Tube**, **Modern**, **Fuzz** (doom).
-  **Tight** sweeps the pre-drive high-pass 40–300 Hz
+- **Amp** — five channels (**Clean / Rhythm / Lead / Thall / Doom**), each a full
+  voicing-table row: gain staging, interstage filtering, dynamic asymmetry, clip
+  curve and boost corner all change together. Split-band drive keeps low-B full
+  while the high band runs a cascaded three-stage clipper at 4x oversampling;
+  **Tight** sweeps the pre-drive high-pass 40–300 Hz, **Clean Blend** mixes the
+  undistorted take back in post-cab, and **Drop Tune** shifts the whole guitar
+  down up to 4 semitones
 - **EQ** — bass shelf (100 Hz), **semi-parametric mid** (250 Hz–2 kHz — metal
   scoops live at 350–700 Hz), treble shelf (8 kHz)
 - **Power Amp** — **Sag** (touch-responsive bloom), **Presence** (3.5 kHz) and
   **Depth** (100 Hz resonance) — the "chest thump" controls
 - **Dual Cabinet IR** — two slots with equal-power blend, low/high trim filters,
-  and a built-in synthesised 4x12 (low cut at 62 Hz — safe for 7-string
-  fundamentals) so it sounds finished out of the box
+  and a real captured IR ("Hecate Cab") built into the binary so it sounds like
+  a miked cabinet with zero setup
 - **Doubler** — quad-track-style widener with drifting ghost takes
 - **Chorus / Delay / Reverb** — delay is free or tempo-synced with damped feedback;
   reverb is Freeverb-style true stereo with width, damping and pre-delay

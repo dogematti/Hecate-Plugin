@@ -9,6 +9,7 @@ HecateAudioProcessor::HecateAudioProcessor()
       apvts(*this, &undoManager, "Parameters", createParameterLayout())
 {
     params.inputTrim = apvts.getRawParameterValue(param::inputTrim);
+    params.dropTune = apvts.getRawParameterValue(param::dropTune);
     params.octaveDirect = apvts.getRawParameterValue(param::octaveDirect);
     params.octaveLevel = apvts.getRawParameterValue(param::octaveLevel);
     params.gateOn = apvts.getRawParameterValue(param::gateOn);
@@ -16,8 +17,9 @@ HecateAudioProcessor::HecateAudioProcessor()
     params.gain = apvts.getRawParameterValue(param::gain);
     params.tight = apvts.getRawParameterValue(param::tight);
     params.boost = apvts.getRawParameterValue(param::boost);
-    params.clipMode = apvts.getRawParameterValue(param::clipMode);
+    params.channel = apvts.getRawParameterValue(param::channel);
     params.tone = apvts.getRawParameterValue(param::tone);
+    params.cleanBlend = apvts.getRawParameterValue(param::cleanBlend);
     params.bass = apvts.getRawParameterValue(param::bass);
     params.mid = apvts.getRawParameterValue(param::mid);
     params.midFreq = apvts.getRawParameterValue(param::midFreq);
@@ -63,6 +65,7 @@ void HecateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
     spec.maximumBlockSize = (juce::uint32)samplesPerBlock;
     spec.numChannels = (juce::uint32)getTotalNumOutputChannels();
 
+    dropTuner.prepare(sampleRate, samplesPerBlock);
     gate.prepare(sampleRate, samplesPerBlock);
     octaver.prepare(sampleRate, samplesPerBlock);
     compressor.prepare(sampleRate, samplesPerBlock);
@@ -85,8 +88,16 @@ void HecateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 
     lastTrimGain = juce::Decibels::decibelsToGain(params.inputTrim->load());
     lastOutputGain = params.outputGain->load();
+    lastCleanBlend = params.cleanBlend->load();
 
-    setLatencySamples(saturator.getLatencySamples());
+    cleanScratch.setSize(getTotalNumOutputChannels(), samplesPerBlock);
+    cleanHpCoeff = 1.0f - std::exp(-juce::MathConstants<float>::twoPi * 90.0f / (float)sampleRate);
+    cleanLpCoeff = 1.0f - std::exp(-juce::MathConstants<float>::twoPi * 6000.0f / (float)sampleRate);
+    cleanHpState[0] = cleanHpState[1] = 0.0f;
+    cleanLpState[0] = cleanLpState[1] = 0.0f;
+
+    lastReportedLatency = saturator.getLatencySamples() + dropTuner.getLatencySamples();
+    setLatencySamples(lastReportedLatency);
 }
 
 bool HecateAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -167,6 +178,17 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
         tunerWritePos.store(pos, std::memory_order_release);
     }
 
+    // Drop-tune the raw guitar; its latency changes with engagement, so the
+    // host report is refreshed from the message thread when it moves
+    dropTuner.process(buffer, (int)params.dropTune->load());
+
+    const int totalLatency = saturator.getLatencySamples() + dropTuner.getLatencySamples();
+    if (totalLatency != lastReportedLatency)
+    {
+        lastReportedLatency = totalLatency;
+        juce::MessageManager::callAsync([this, totalLatency] { setLatencySamples(totalLatency); });
+    }
+
     if (params.gateOn->load() > 0.5f)
         meterGateOpen.store(gate.process(buffer, params.gateThreshold->load()));
     else
@@ -174,12 +196,17 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     octaver.process(buffer, params.octaveLevel->load(), params.octaveDirect->load());
 
+    // Capture the clean parallel path before any drive
+    const int cleanChannels = juce::jmin(buffer.getNumChannels(), cleanScratch.getNumChannels());
+    for (int ch = 0; ch < cleanChannels; ++ch)
+        cleanScratch.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+
     if (params.compOn->load() > 0.5f)
         compressor.process(buffer, params.compThreshold->load(), params.compRatio->load());
 
     saturator.process(buffer, params.gain->load(), params.tight->load(),
                       params.tone->load(), params.boost->load() > 0.5f,
-                      (int)params.clipMode->load());
+                      (int)params.channel->load());
 
     equalizer.process(buffer, params.bass->load(), params.mid->load(),
                       params.midFreq->load(), params.treble->load());
@@ -189,6 +216,33 @@ void HecateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce::
 
     cabinet.process(buffer, params.irBlend->load(), params.cabLowCut->load(),
                     params.cabHighCut->load());
+
+    // Clean blend: the undistorted take mixed in post-cab, band-limited so
+    // it sits naturally against the miked amp (the thall clarity trick)
+    const float cleanBlendNow = params.cleanBlend->load();
+    if (cleanBlendNow > 0.001f || lastCleanBlend > 0.001f)
+    {
+        for (int ch = 0; ch < cleanChannels; ++ch)
+        {
+            const auto* clean = cleanScratch.getReadPointer(ch);
+            auto* out = buffer.getWritePointer(ch);
+            float hp = cleanHpState[ch];
+            float lp = cleanLpState[ch];
+
+            for (int i = 0; i < numSamples; ++i)
+            {
+                hp += cleanHpCoeff * (clean[i] - hp);
+                lp += cleanLpCoeff * ((clean[i] - hp) - lp);
+                const float blend = lastCleanBlend
+                                    + (cleanBlendNow - lastCleanBlend) * (float)i / (float)numSamples;
+                out[i] += lp * blend;
+            }
+
+            cleanHpState[ch] = hp;
+            cleanLpState[ch] = lp;
+        }
+    }
+    lastCleanBlend = cleanBlendNow;
 
     juce::dsp::AudioBlock<float> block(buffer);
     juce::dsp::ProcessContextReplacing<float> context(block);
