@@ -256,6 +256,21 @@ void HecateAudioProcessor::setStateInformation(const void* data, int sizeInBytes
     if (auto xml = juce::XmlDocument::parse(xmlString))
     {
         apvts.replaceState(juce::ValueTree::fromXml(*xml));
+
+        // Force-sync every parameter from the restored tree. replaceState's
+        // change detection skips parameters whose tree value is unchanged,
+        // which can leave stale (e.g. un-snapped bool) raw values behind.
+        for (auto* parameter : getParameters())
+        {
+            if (auto* ranged = dynamic_cast<juce::RangedAudioParameter*>(parameter))
+            {
+                const auto child = apvts.state.getChildWithProperty("id", ranged->paramID);
+                if (child.isValid())
+                    ranged->setValueNotifyingHost(
+                        ranged->convertTo0to1((float)child.getProperty("value")));
+            }
+        }
+
         reloadImpulseResponsesFromState();
     }
 }
